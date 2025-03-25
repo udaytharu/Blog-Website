@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Sign Up - BlogSite</title>
+    <link rel="stylesheet" href="editorlog.css">
+</head>
+<body>
+    <div class="signup-container">
+        <div class="editor-signup">
+            <h2>Editor Login</h2>
+            <form id="editor-form">
+                <input type="text" id="editor-username" placeholder="Username" required>
+                <input type="password" id="editor-password" placeholder="Password" required>
+                <input type="hidden" name="csrf_token" id="csrf_token">
+                <button type="submit">Login</button>
+            </form>
+            <p id="editor-error" class="error"></p>
+        </div>
+    <script src="editorlog.js"></script>
+</body>
+</html>
