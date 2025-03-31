@@ -3,8 +3,21 @@ function login() {
     const errorMsg = document.getElementById('errorMsg');
 
     if (username) {
-        // Store username in localStorage
-        localStorage.setItem('username', username);
+        // Create user object with unique ID
+        const user = {
+            id: Date.now().toString(),
+            username: username,
+            joinDate: new Date().toISOString()
+        };
+
+        // Store user data in localStorage
+        localStorage.setItem('currentUser', JSON.stringify(user));
+        
+        // Initialize posts array if it doesn't exist
+        if (!localStorage.getItem('posts')) {
+            localStorage.setItem('posts', JSON.stringify([]));
+        }
+
         // Redirect to user page
         window.location.href = 'user_page/user.html';
     } else {

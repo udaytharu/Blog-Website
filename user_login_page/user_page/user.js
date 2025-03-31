@@ -1,112 +1,240 @@
+// Get current user from localStorage
+const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+
+// State management
+let posts = JSON.parse(localStorage.getItem('posts')) || [];
+let currentPostIndex = -1;
+let searchQuery = '';
+let sortBy = 'newest';
+let filterBy = 'all';
+
+// DOM Elements
+const postsContainer = document.getElementById('postsContainer');
+const searchInput = document.getElementById('searchPosts');
+const sortSelect = document.getElementById('sortBy');
+const filterSelect = document.getElementById('filterBy');
+const commentModal = document.getElementById('commentModal');
+const modalComments = document.getElementById('modalComments');
+const modalCommentInput = document.getElementById('modalCommentInput');
+const noPostsMessage = document.getElementById('noPosts');
+const toast = document.getElementById('toast');
+
+// Event Listeners
+document.addEventListener('DOMContentLoaded', () => {
+    if (!currentUser) {
+        window.location.href = '../userlog.html';
+        return;
+    }
+    displayPosts();
+    setupEventListeners();
+});
+
+function setupEventListeners() {
+    searchInput.addEventListener('input', (e) => {
+        searchQuery = e.target.value.toLowerCase();
+        displayPosts();
+    });
+
+    sortSelect.addEventListener('change', (e) => {
+        sortBy = e.target.value;
+        displayPosts();
+    });
+
+    filterSelect.addEventListener('change', (e) => {
+        filterBy = e.target.value;
+        displayPosts();
+    });
+}
+
 function displayPosts() {
-    const postsContainer = document.getElementById('postsContainer');
-    let posts = JSON.parse(localStorage.getItem('posts') || '[]');
-    
-    // Ensure all posts have required fields
-    posts = posts.map(post => ({
-        ...post,
-        likes: post.likes || 0,
-        likedByUser: post.likedByUser || false,
-        comments: post.comments || [] // Comments: { id, text, username }
-    }));
-    
-    postsContainer.innerHTML = '';
-    
-    const currentUser = localStorage.getItem('username') || 'Anonymous';
-    
-    posts.forEach((post, index) => {
-        const postElement = document.createElement('div');
-        postElement.className = 'post';
-        const likeButtonTitle = post.likedByUser ? `Liked by ${currentUser}` : '';
-        
-        // Add photo rendering logic
-        const photoHTML = post.photos && post.photos.length > 0 
-            ? post.photos.map(photo => `<img src="${photo}" alt="Post Image" class="post-image">`).join('')
-            : '';
-        
-        postElement.innerHTML = `
-            <h2 class="post-title">${post.title}</h2>
-            <div class="post-date">Posted on: ${post.date}</div>
-            <div class="post-content">${post.description}</div>
-            ${photoHTML} <!-- Insert photos here -->
-            <div class="interaction-bar">
-                <button class="like-btn ${post.likedByUser ? 'liked' : ''}" 
-                        onclick="toggleLike(${index})" 
-                        title="${likeButtonTitle}">
-                    ${post.likedByUser ? 'Unlike' : 'Like'} (${post.likes})
+    let filteredPosts = [...posts];
+
+    // Apply search filter
+    if (searchQuery) {
+        filteredPosts = filteredPosts.filter(post =>
+            post.title.toLowerCase().includes(searchQuery) ||
+            post.description.toLowerCase().includes(searchQuery)
+        );
+    }
+
+    // Apply sort
+    switch (sortBy) {
+        case 'newest':
+            filteredPosts.sort((a, b) => new Date(b.date) - new Date(a.date));
+            break;
+        case 'oldest':
+            filteredPosts.sort((a, b) => new Date(a.date) - new Date(b.date));
+            break;
+        case 'most-liked':
+            filteredPosts.sort((a, b) => b.likes.length - a.likes.length);
+            break;
+        case 'most-commented':
+            filteredPosts.sort((a, b) => b.comments.length - a.comments.length);
+            break;
+    }
+
+    // Apply status filter
+    if (filterBy !== 'all') {
+        filteredPosts = filteredPosts.filter(post => post.status === filterBy);
+    }
+
+    if (filteredPosts.length === 0) {
+        noPostsMessage.style.display = 'block';
+        postsContainer.innerHTML = '';
+        return;
+    }
+
+    noPostsMessage.style.display = 'none';
+    postsContainer.innerHTML = filteredPosts.map((post, index) => `
+        <div class="post-card">
+            <div class="post-header">
+                <h2>${post.title}</h2>
+                <div class="post-meta">
+                    <span><i class="fas fa-user"></i> ${post.author}</span>
+                    <span><i class="fas fa-calendar"></i> ${formatDate(post.date)}</span>
+                </div>
+            </div>
+            <div class="post-content">
+                <p>${truncateText(post.description, 200)}</p>
+                ${post.photos && post.photos.length > 0 ? `
+                    <div class="post-images">
+                        ${post.photos.map(photo => `
+                            <img src="${photo}" alt="Post image">
+                        `).join('')}
+                    </div>
+                ` : ''}
+            </div>
+            <div class="post-actions">
+                <button onclick="toggleLike(${index})" class="btn btn-like ${post.likes.some(like => like.userId === currentUser.id) ? 'liked' : ''}">
+                    <i class="fas fa-heart"></i>
+                    <span>${post.likes.length}</span>
+                </button>
+                <button onclick="openCommentModal(${index})" class="btn btn-comment">
+                    <i class="fas fa-comment"></i>
+                    <span>${post.comments.length}</span>
                 </button>
             </div>
-            <div class="comment-section">
-                <h3>Comments:</h3>
-                <div id="comments-${index}">
-                    ${post.comments.map(comment => `
-                        <div class="comment">
-                            ${comment.username}: ${comment.text}
-                            ${comment.username === currentUser ? 
-                                `<button class="delete-comment-btn" onclick="deleteComment(${index}, '${comment.id}')">Delete</button>` 
-                                : ''}
-                        </div>
-                    `).join('')}
-                </div>
-                <textarea class="comment-input" id="comment-input-${index}" 
-                        placeholder="Add a comment..."></textarea>
-                <button class="comment-btn" onclick="addComment(${index})">Comment</button>
-            </div>
-        `;
-        postsContainer.appendChild(postElement);
-    });
-    
-    localStorage.setItem('posts', JSON.stringify(posts));
+        </div>
+    `).join('');
 }
 
 function toggleLike(index) {
-    let posts = JSON.parse(localStorage.getItem('posts') || '[]');
-    if (!posts[index].likedByUser) {
-        posts[index].likes += 1;
-        posts[index].likedByUser = true;
+    const post = posts[index];
+    const likeIndex = post.likes.findIndex(like => like.userId === currentUser.id);
+
+    if (likeIndex === -1) {
+        post.likes.push({
+            userId: currentUser.id,
+            username: currentUser.username,
+            date: new Date().toISOString()
+        });
     } else {
-        posts[index].likes -= 1;
-        posts[index].likedByUser = false;
+        post.likes.splice(likeIndex, 1);
     }
+
     localStorage.setItem('posts', JSON.stringify(posts));
     displayPosts();
+    showToast('Like status updated');
 }
 
-function addComment(index) {
-    const commentInput = document.getElementById(`comment-input-${index}`);
-    const commentText = commentInput.value.trim();
-    const currentUser = localStorage.getItem('username') || 'Anonymous';
+function openCommentModal(index) {
+    currentPostIndex = index;
+    const post = posts[index];
     
-    if (commentText) {
-        let posts = JSON.parse(localStorage.getItem('posts') || '[]');
-        posts[index].comments = posts[index].comments || [];
-        const commentId = Date.now().toString(); // Unique ID
-        posts[index].comments.push({ id: commentId, text: commentText, username: currentUser });
-        localStorage.setItem('posts', JSON.stringify(posts));
-        commentInput.value = '';
-        displayPosts();
+    modalComments.innerHTML = post.comments.map(comment => `
+        <div class="comment">
+            <div class="comment-header">
+                <span class="comment-author">${comment.username}</span>
+                <span class="comment-date">${formatDate(comment.date)}</span>
+            </div>
+            <p class="comment-text">${comment.text}</p>
+            ${comment.userId === currentUser.id ? `
+                <button onclick="deleteComment(${index}, '${comment.id}')" class="btn btn-delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+            ` : ''}
+        </div>
+    `).join('');
+    
+    commentModal.style.display = 'block';
+}
+
+function closeCommentModal() {
+    commentModal.style.display = 'none';
+    currentPostIndex = -1;
+}
+
+function submitModalComment() {
+    if (currentPostIndex === -1) return;
+
+    const commentText = modalCommentInput.value.trim();
+    if (!commentText) {
+        showToast('Please enter a comment');
+        return;
     }
+
+    const post = posts[currentPostIndex];
+    post.comments.push({
+        id: Date.now().toString(),
+        userId: currentUser.id,
+        username: currentUser.username,
+        text: commentText,
+        date: new Date().toISOString()
+    });
+
+    localStorage.setItem('posts', JSON.stringify(posts));
+    modalCommentInput.value = '';
+    openCommentModal(currentPostIndex);
+    showToast('Comment added successfully');
 }
 
 function deleteComment(postIndex, commentId) {
-    let posts = JSON.parse(localStorage.getItem('posts') || '[]');
-    const currentUser = localStorage.getItem('username') || 'Anonymous';
-    
-    // Only delete if the comment belongs to the current user
-    const commentToDelete = posts[postIndex].comments.find(comment => comment.id === commentId);
-    if (commentToDelete && commentToDelete.username === currentUser) {
-        posts[postIndex].comments = posts[postIndex].comments.filter(comment => 
-            comment.id !== commentId
-        );
+    const post = posts[postIndex];
+    const commentIndex = post.comments.findIndex(comment => comment.id === commentId);
+
+    if (commentIndex !== -1 && post.comments[commentIndex].userId === currentUser.id) {
+        post.comments.splice(commentIndex, 1);
         localStorage.setItem('posts', JSON.stringify(posts));
-        displayPosts();
-    } else {
-        console.log('You can only delete your own comments.');
-        // Optionally, alert the user: alert('You can only delete your own comments.');
+        openCommentModal(postIndex);
+        showToast('Comment deleted successfully');
     }
 }
 
-// Initial display of posts when the page loads
-window.onload = function() {
-    displayPosts();
+// Utility functions
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function truncateText(text, maxLength) {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+}
+
+function showToast(message) {
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    if (event.target === commentModal) {
+        closeCommentModal();
+    }
 };
+
+// Handle keyboard events
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape' && commentModal.style.display === 'block') {
+        closeCommentModal();
+    }
+});

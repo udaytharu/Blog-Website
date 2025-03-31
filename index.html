@@ -3,26 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Blog - Home</title>
+    <meta name="description" content="A modern blog platform for sharing thoughts, photos, and stories with the world">
+    <meta name="keywords" content="blog, stories, photos, writing, community">
+    <meta name="author" content="uday-studio">
+    <title>My Blog - Share Your Stories</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/png" href="https://www.udayrajchaudhary.com.np/favicon.ico">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
     <div class="home-container">
-        <header>
-            <h1>My Blog</h1>
+        <header class="fade-in">
+            <h1><i class="fas fa-pen-fancy"></i> My Blog</h1>
             <nav>
-                <a href="/editor_login_page/editorlog.html" class="nav-btn" target="_blank">Editor Dashboard</a>
-                <a href="/user_login_page/userlog.html" class="nav-btn" target="_blank">View Posts</a>
+                <a href="/editor_login_page/editorlog.html" class="nav-btn" target="_blank">
+                    <i class="fas fa-edit"></i> Editor Dashboard
+                </a>
+                <a href="/user_login_page/userlog.html" class="nav-btn" target="_blank">
+                    <i class="fas fa-book-reader"></i> View Posts
+                </a>
             </nav>
         </header>
         <main>
-            <section class="welcome">
+            <section class="welcome fade-in">
                 <h2>Welcome to My Blog!</h2>
                 <p>Share your thoughts, photos, and stories with the world. Create posts in the Editor Dashboard or explore what others have shared on the View Posts page.</p>
             </section>
+            
+            <section class="features fade-in">
+                <div class="feature-grid">
+                    <div class="feature-card">
+                        <i class="fas fa-pencil-alt"></i>
+                        <h3>Create Content</h3>
+                        <p>Write and publish your stories with our easy-to-use editor</p>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fas fa-image"></i>
+                        <h3>Share Photos</h3>
+                        <p>Upload and share your favorite moments with the community</p>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fas fa-comments"></i>
+                        <h3>Engage</h3>
+                        <p>Connect with other writers and readers through comments</p>
+                    </div>
+                </div>
+            </section>
         </main>
-        <footer>
-            <p>&copy;<a href="https://www.udayrajchaudhary.com.np/"> uday-studio</a> 2025 My Blog. All rights reserved.</p>
+        <footer class="fade-in">
+            <div class="social-links">
+                <a href="#" class="social-link"><i class="fab fa-facebook"></i></a>
+                <a href="#" class="social-link"><i class="fab fa-twitter"></i></a>
+                <a href="#" class="social-link"><i class="fab fa-instagram"></i></a>
+            </div>
+            <p>&copy; <a href="https://www.udayrajchaudhary.com.np/">uday-studio</a> 2025 My Blog. All rights reserved.</p>
         </footer>
     </div>
     <script src="script.js"></script>

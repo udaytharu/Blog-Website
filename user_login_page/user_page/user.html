@@ -3,14 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blog Posts</title>
+    <meta name="description" content="View and interact with blog posts">
+    <meta name="theme-color" content="#4CAF50">
+    <title>Blog Posts - Read & Interact</title>
     <link rel="stylesheet" href="user.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="icon" type="image/png" href="https://www.udayrajchaudhary.com.np/favicon.ico">
 </head>
 <body>
+    <nav class="user-nav">
+        <div class="nav-brand">
+            <i class="fas fa-book-reader"></i>
+            <span>Blog Posts</span>
+        </div>
+        <div class="nav-links">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchPosts" placeholder="Search posts...">
+            </div>
+            <a href="../userlog.html" class="nav-link" id="logoutBtn">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </a>
+        </div>
+    </nav>
+
     <div class="blog-container">
-        <h1>Blog Posts</h1>
-        <div id="postsContainer"></div>
-    </div>  
+        <div class="filters">
+            <div class="filter-group">
+                <label for="sortBy">Sort by:</label>
+                <select id="sortBy" onchange="applyFilters()">
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="mostLiked">Most Liked</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="filterBy">Filter by:</label>
+                <select id="filterBy" onchange="applyFilters()">
+                    <option value="all">All Posts</option>
+                    <option value="liked">Liked Posts</option>
+                    <option value="commented">Posts with Comments</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="posts-grid" id="postsContainer">
+            <!-- Posts will be dynamically inserted here -->
+        </div>
+
+        <div id="noPosts" class="no-posts" style="display: none;">
+            <i class="fas fa-search"></i>
+            <h2>No Posts Found</h2>
+            <p>Try adjusting your search or filters</p>
+        </div>
+    </div>
+
+    <!-- Comment Modal -->
+    <div id="commentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Comments</h3>
+                <button class="close-modal" onclick="closeCommentModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="modalComments"></div>
+                <div class="comment-form">
+                    <textarea id="modalCommentInput" placeholder="Write a comment..."></textarea>
+                    <button class="btn btn-primary" onclick="submitModalComment()">
+                        <i class="fas fa-paper-plane"></i> Post Comment
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
     <script src="user.js"></script>
 </body>
 </html>

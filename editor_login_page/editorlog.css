@@ -1,4 +1,4 @@
-/* styles.css */
+/* Modern CSS Reset and Base Styles */
 * {
     box-sizing: border-box;
     margin: 0;
@@ -6,63 +6,210 @@
 }
 
 body {
-    font-family: 'Arial', sans-serif;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     line-height: 1.6;
-    background: #f4f4f4;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
 }
-
-
-button {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    border: 2px solid rgba(0,0,0,0.1);
-    transition: background 0.3s;
-    
-
-}
-button:hover {
-    background: rgb(124, 171, 254);
-    border: 2px solid black;
-}
-
-
-
-
 
 .signup-container {
-    display: flex;
-    justify-content: space-around;
-    padding: 3rem 1rem;
-    max-width: 1000px;
+    width: 100%;
+    max-width: 400px;
     margin: 0 auto;
 }
 
-.editor-signup{
-    width: 45%;
-    background: white;
-    padding: 2rem;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+.editor-signup {
+    background: rgba(255, 255, 255, 0.95);
+    padding: 2.5rem;
+    border-radius: 15px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    backdrop-filter: blur(10px);
 }
 
-input, textarea {
+.logo-container {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.logo-container i {
+    font-size: 3rem;
+    color: #4CAF50;
+    margin-bottom: 1rem;
+}
+
+.logo-container h2 {
+    color: #2c3e50;
+    font-size: 1.8rem;
+    font-weight: 600;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.input-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.input-group i {
+    position: absolute;
+    left: 1rem;
+    color: #7f8c8d;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.input-group input {
     width: 100%;
-    padding: 0.75rem;
-    margin: 0.5rem 0;
-    border: 1px solid #ddd;
-    border-radius: 4px;
+    padding: 1rem 1rem 1rem 3rem;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: all 0.3s ease;
 }
 
+.input-group input:focus {
+    border-color: #4CAF50;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+}
 
-@media (max-width: 768px) {
-    .signup-container {
-        flex-direction: column;
+.toggle-password {
+    z-index: 2;
+    background: transparent;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+}
+
+.toggle-password:hover {
+    color: #4CAF50;
+}
+
+/* Add padding to password input to prevent text overlap with eye icon */
+.input-group input[type="password"] {
+    padding-right: 1rem;
+}
+
+.remember-me {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    color: #7f8c8d;
+}
+
+.remember-me input[type="checkbox"] {
+    width: auto;
+    margin-right: 0.5rem;
+}
+
+.forgot-password {
+    color: #4CAF50;
+    text-decoration: none;
+    transition: color 0.3s ease;
+}
+
+.forgot-password:hover {
+    color: #45a049;
+}
+
+.login-btn {
+    background: linear-gradient(45deg, #4CAF50, #45a049);
+    color: white;
+    padding: 1rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.login-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(76, 175, 80, 0.3);
+}
+
+.login-btn i {
+    font-size: 1.1rem;
+}
+
+.error {
+    color: #e74c3c;
+    font-size: 0.9rem;
+    text-align: center;
+    margin-top: 0.5rem;
+}
+
+.back-to-home {
+    text-align: center;
+    margin-top: 2rem;
+}
+
+.back-to-home a {
+    color: #7f8c8d;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: color 0.3s ease;
+}
+
+.back-to-home a:hover {
+    color: #4CAF50;
+}
+
+/* Animation */
+.fade-in {
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 480px) {
+    body {
         padding: 1rem;
     }
-    .editor-signup{
-        width: 100%;
-        margin-bottom: 1rem;
+
+    .editor-signup {
+        padding: 2rem;
+    }
+
+    .logo-container i {
+        font-size: 2.5rem;
+    }
+
+    .logo-container h2 {
+        font-size: 1.5rem;
+    }
+
+    .login-form {
+        gap: 1rem;
     }
 }

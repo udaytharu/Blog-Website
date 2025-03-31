@@ -3,15 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User Login</title>
+    <meta name="description" content="Login to access the blog platform">
+    <meta name="theme-color" content="#4CAF50">
+    <title>Welcome - Blog Platform</title>
     <link rel="stylesheet" href="userlog.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="icon" type="image/png" href="https://www.udayrajchaudhary.com.np/favicon.ico">
 </head>
 <body>
     <div class="login-container">
-        <h2>Enter your name to join</h2>
-        <input type="text" id="username" class="input-field" placeholder="Enter your name">
-        <button class="login-btn" onclick="login()">Login</button>
-        <div id="errorMsg" class="error">Please enter your name</div>
+        <div class="login-header">
+            <i class="fas fa-blog"></i>
+            <h1>Welcome Back</h1>
+            <p>Enter your name to join our community</p>
+        </div>
+        <form class="login-form" onsubmit="event.preventDefault(); login();">
+            <div class="input-group">
+                <i class="fas fa-user"></i>
+                <input type="text" id="username" class="input-field" placeholder="Enter your name" autocomplete="off" required>
+            </div>
+            <button type="submit" class="login-btn">
+                <span>Join Now</span>
+                <i class="fas fa-arrow-right"></i>
+            </button>
+            <div id="errorMsg" class="error">
+                <i class="fas fa-exclamation-circle"></i>
+                <span>Please enter your name</span>
+            </div>
+        </form>
+        <div class="login-footer">
+            <p>Join our community of bloggers</p>
+        </div>
     </div>
     <script src="userlog.js"></script>
 </body>
