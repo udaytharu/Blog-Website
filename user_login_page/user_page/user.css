@@ -89,6 +89,7 @@ body {
     max-width: 1200px;
     margin: 2rem auto;
     padding: 0 1rem;
+    overflow-x: hidden;
 }
 
 /* Filters */
@@ -118,41 +119,111 @@ body {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 2rem;
+    padding: 0 1rem;
+    box-sizing: border-box;
 }
 
-.post {
+/* Post Card */
+.post-card {
     background: white;
     border-radius: 8px;
     box-shadow: var(--shadow);
     overflow: hidden;
     transition: var(--transition);
+    padding: 0.75rem;
+    margin-bottom: 1.5rem;
+    max-width: 100%;
 }
 
-.post:hover {
+.post-card:hover {
     transform: translateY(-5px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.2);
 }
 
 .post-image {
     width: 100%;
-    height: 200px;
+    height: auto;
+    max-height: 200px;
+    min-height: 100px;
     object-fit: cover;
+    max-width: 100%;
+    aspect-ratio: 16 / 9;
+}
+
+.post-images {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    max-width: 100%;
+}
+
+.post-images img {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    object-fit: contain; /* Changed to contain to show full image */
+    border-radius: 4px;
 }
 
 .post-content {
-    padding: 1.5rem;
+    padding: 1rem;
+    max-height: 300px;
+    overflow-y: auto;
+    cursor: pointer;
 }
 
-.post-title {
+/* Read More Link */
+.read-more {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: bold;
+    display: inline-block;
+    margin-top: 0.5rem;
+}
+
+.read-more:hover {
+    color: var(--secondary-color);
+    text-decoration: underline;
+}
+
+/* Custom Scrollbar for Post Content */
+.post-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.post-content::-webkit-scrollbar-track {
+    background: var(--light-gray);
+    border-radius: 4px;
+}
+
+.post-content::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 4px;
+}
+
+.post-content::-webkit-scrollbar-thumb:hover {
+    background: var(--secondary-color);
+}
+
+.post-header h2 {
     font-size: 1.25rem;
     margin-bottom: 0.5rem;
     color: var(--text-color);
+    overflow-wrap: break-word;
 }
 
-.post-date {
+.post-meta {
     font-size: 0.875rem;
     color: #666;
     margin-bottom: 1rem;
+    display: flex;
+    gap: 1rem;
+}
+
+.post-meta span {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
 }
 
 .post-text {
@@ -161,7 +232,7 @@ body {
 }
 
 /* Interaction Bar */
-.interaction-bar {
+.post-actions {
     display: flex;
     align-items: center;
     gap: 1rem;
@@ -188,6 +259,15 @@ body {
 
 .btn.liked {
     color: var(--primary-color);
+}
+
+.btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.btn-primary:hover {
+    background: var(--secondary-color);
 }
 
 /* Comments */
@@ -218,13 +298,23 @@ body {
     color: #444;
 }
 
-.delete-comment {
-    color: #ff4444;
-    cursor: pointer;
-    transition: var(--transition);
+.comment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.25rem;
 }
 
-.delete-comment:hover {
+.comment-date {
+    font-size: 0.75rem;
+    color: #666;
+}
+
+.btn-delete {
+    color: #ff4444;
+}
+
+.btn-delete:hover {
     color: #cc0000;
 }
 
@@ -292,6 +382,25 @@ body {
     overflow-y: auto;
 }
 
+/* Custom Scrollbar for Modal Body */
+.modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.modal-body::-webkit-scrollbar-track {
+    background: var(--light-gray);
+    border-radius: 4px;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 4px;
+}
+
+.modal-body::-webkit-scrollbar-thumb:hover {
+    background: var(--secondary-color);
+}
+
 /* Toast Notification */
 .toast {
     position: fixed;
@@ -350,11 +459,65 @@ body {
 
     .posts-grid {
         grid-template-columns: 1fr;
+        gap: 1.5rem;
+        padding: 0 1rem;
+    }
+
+    .post-card {
+        padding: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .post-content {
+        max-height: 250px;
+    }
+
+    .post-image {
+        max-height: 150px;
+        min-height: 80px;
+    }
+
+    .post-images img {
+        max-height: none; /* Remove max-height for full image display */
     }
 
     .modal-content {
         width: 95%;
         margin: 1rem auto;
+    }
+}
+
+@media (max-width: 480px) {
+    .posts-grid {
+        gap: 1rem;
+        padding: 0 0.5rem;
+    }
+
+    .post-card {
+        padding: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .post-content {
+        padding: 0.75rem;
+        max-height: 200px;
+    }
+
+    .post-image {
+        max-height: 100px;
+        min-height: 60px;
+    }
+
+    .post-images img {
+        max-height: none; /* Remove max-height for full image display */
+    }
+
+    .post-header h2 {
+        font-size: 1.1rem;
+    }
+
+    .post-meta {
+        font-size: 0.8rem;
     }
 }
 
@@ -369,7 +532,7 @@ body {
     to { transform: translateY(0); opacity: 1; }
 }
 
-.post {
+.post-card {
     animation: fadeIn 0.5s ease;
 }
 

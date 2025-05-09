@@ -13,11 +13,26 @@ const editIndexInput = document.getElementById('editIndex');
 const formTitle = document.getElementById('formTitle');
 const cancelBtn = document.getElementById('cancelBtn');
 const searchInput = document.getElementById('searchPosts');
+const searchMediaInput = document.getElementById('searchMedia');
 const logoutBtn = document.getElementById('logoutBtn');
+const postStatusSelect = document.getElementById('postStatus');
+const postsList = document.getElementById('postsList');
+const draftsList = document.getElementById('draftsList');
+const draftCountBadge = document.getElementById('draftCount');
+const postCountBadge = document.getElementById('postCount');
+const timeRangeSelect = document.getElementById('timeRange');
+
+// Settings-specific DOM Elements
+const profileForm = document.getElementById('profileForm');
+const notificationForm = document.getElementById('notificationForm');
+const profilePreview = document.getElementById('profilePreview');
+const changePictureBtn = document.querySelector('.profile-upload .btn-secondary');
+const editorNameDisplay = document.getElementById('editorName');
 
 // State
 let currentPhotos = [];
-let currentSection = 'posts';
+let currentSection = 'dashboard';
+let profilePicture = localStorage.getItem('editor_profile_picture') || 'https://via.placeholder.com/50';
 
 // Authentication Check
 function checkAuth() {
@@ -45,7 +60,6 @@ function showToast(message, type = 'success') {
 function showSection(section) {
     currentSection = section;
     
-    // Update sidebar active state
     document.querySelectorAll('.sidebar-menu li').forEach(item => {
         item.classList.remove('active');
         if (item.querySelector('a').getAttribute('onclick').includes(section)) {
@@ -53,21 +67,19 @@ function showSection(section) {
         }
     });
 
-    // Show/hide sections
     document.querySelectorAll('.editor-section').forEach(s => {
         s.style.display = s.id === `${section}-section` ? 'block' : 'none';
     });
 
-    // Update form title
-    formTitle.textContent = section === 'new-post' ? 'Create New Post' : 'Edit Post';
-
-    // Load section-specific content
     switch(section) {
         case 'dashboard':
             loadDashboard();
             break;
         case 'posts':
             displayPosts();
+            break;
+        case 'new-post':
+            formTitle.textContent = editIndexInput.value === '-1' ? 'Create New Post' : 'Edit Post';
             break;
         case 'drafts':
             displayDrafts();
@@ -82,475 +94,7 @@ function showSection(section) {
             loadSettings();
             break;
     }
-}
-
-// Dashboard Functions
-function loadDashboard() {
-    // Update stats
-    const posts = JSON.parse(localStorage.getItem(POSTS_KEY) || '[]');
-    const drafts = JSON.parse(localStorage.getItem(DRAFTS_KEY) || '[]');
-    
-    document.getElementById('totalPosts').textContent = posts.length;
-    document.getElementById('draftCount').textContent = drafts.length;
-    
-    // Calculate total views and likes
-    const totalViews = posts.reduce((sum, post) => sum + (post.views || 0), 0);
-    const totalLikes = posts.reduce((sum, post) => sum + (post.likes?.length || 0), 0);
-    const totalComments = posts.reduce((sum, post) => sum + (post.comments?.length || 0), 0);
-    
-    document.getElementById('totalViews').textContent = totalViews;
-    document.getElementById('totalLikes').textContent = totalLikes;
-    document.getElementById('totalComments').textContent = totalComments;
-
-    // Update charts
-    updateViewsChart();
-    updateTopPosts();
-}
-
-// Views Chart
-function updateViewsChart() {
-    try {
-        const ctx = document.getElementById('viewsChart');
-        if (!ctx) {
-            console.error('Views chart canvas not found');
-            return;
-        }
-
-        const posts = getLocalStorageItem(POSTS_KEY);
-        
-        // Get last 7 days of data
-        const dates = Array.from({length: 7}, (_, i) => {
-            const date = new Date();
-            date.setDate(date.getDate() - i);
-            return date.toLocaleDateString();
-        }).reverse();
-
-        const viewsData = dates.map(date => {
-            return posts.reduce((sum, post) => {
-                return sum + (post.views?.[date] || 0);
-            }, 0);
-        });
-
-        // Destroy existing chart if it exists
-        if (window.viewsChart) {
-            window.viewsChart.destroy();
-        }
-
-        window.viewsChart = new Chart(ctx.getContext('2d'), {
-            type: 'line',
-            data: {
-                labels: dates,
-                datasets: [{
-                    label: 'Views',
-                    data: viewsData,
-                    borderColor: '#4CAF50',
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false
-            }
-        });
-    } catch (error) {
-        console.error('Error creating views chart:', error);
-        showToast('Error loading views chart', 'error');
-    }
-}
-
-// Top Posts
-function updateTopPosts() {
-    const topPosts = document.getElementById('topPosts');
-    const posts = JSON.parse(localStorage.getItem(POSTS_KEY) || '[]');
-    
-    const sortedPosts = [...posts].sort((a, b) => {
-        const viewsA = Object.values(a.views || {}).reduce((sum, val) => sum + val, 0);
-        const viewsB = Object.values(b.views || {}).reduce((sum, val) => sum + val, 0);
-        return viewsB - viewsA;
-    }).slice(0, 5);
-
-    topPosts.innerHTML = sortedPosts.map(post => `
-        <div class="top-post-item">
-            <h4>${post.title}</h4>
-            <p>${Object.values(post.views || {}).reduce((sum, val) => sum + val, 0)} views</p>
-        </div>
-    `).join('');
-}
-
-// Drafts Functions
-function displayDrafts() {
-    const drafts = getLocalStorageItem(DRAFTS_KEY);
-    const postList = document.getElementById('postList');
-    
-    postList.innerHTML = '';
-    
-    if (drafts.length === 0) {
-        postList.innerHTML = '<div class="no-posts">No drafts found</div>';
-        return;
-    }
-    
-    drafts.forEach((draft, index) => {
-        const draftDiv = document.createElement('div');
-        draftDiv.className = 'post-item';
-        draftDiv.innerHTML = `
-            <h3>${draft.title}</h3>
-            <p>${draft.description}</p>
-            ${draft.photos && draft.photos.length > 0 ? 
-                draft.photos.map(photo => `<img src="${photo}" alt="Draft Image" class="post-image">`).join('') 
-                : ''}
-            <div class="post-meta">
-                <span><i class="fas fa-calendar"></i> ${draft.date}</span>
-                <span><i class="fas fa-clock"></i> Last modified: ${new Date(draft.lastModified).toLocaleString()}</span>
-            </div>
-            <div class="post-actions">
-                <button class="btn btn-primary" onclick="editDraft(${index})">
-                    <i class="fas fa-edit"></i> Edit
-                </button>
-                <button class="btn btn-secondary" onclick="deleteDraft(${index})">
-                    <i class="fas fa-trash"></i> Delete
-                </button>
-            </div>
-        `;
-        postList.appendChild(draftDiv);
-    });
-}
-
-// Edit Draft
-function editDraft(index) {
-    const drafts = getLocalStorageItem(DRAFTS_KEY);
-    const draft = drafts[index];
-    
-    titleInput.value = draft.title;
-    descriptionInput.value = draft.description;
-    editIndexInput.value = index;
-    currentPhotos = [...(draft.photos || [])];
-    
-    showSection('new-post');
-    previewPhotos(currentPhotos);
-    cancelBtn.style.display = 'inline-block';
-}
-
-// Delete Draft
-function deleteDraft(index) {
-    if (confirm('Are you sure you want to delete this draft? This action cannot be undone.')) {
-        try {
-            let drafts = getLocalStorageItem(DRAFTS_KEY);
-            drafts.splice(index, 1);
-            if (setLocalStorageItem(DRAFTS_KEY, drafts)) {
-                showToast('Draft deleted successfully');
-                displayDrafts();
-            }
-        } catch (error) {
-            showToast('Error deleting draft', 'error');
-            console.error('Delete error:', error);
-        }
-    }
-}
-
-// Media Library Functions
-function loadMediaLibrary() {
-    const mediaGrid = document.getElementById('mediaGrid');
-    const posts = getLocalStorageItem(POSTS_KEY);
-    const drafts = getLocalStorageItem(DRAFTS_KEY);
-    
-    // Collect all images from posts and drafts
-    const allImages = [
-        ...posts.flatMap(post => post.photos || []),
-        ...drafts.flatMap(draft => draft.photos || [])
-    ];
-    
-    if (allImages.length === 0) {
-        mediaGrid.innerHTML = '<div class="no-media">No media found</div>';
-        return;
-    }
-    
-    mediaGrid.innerHTML = allImages.map((image, index) => `
-        <div class="media-item">
-            <img src="${image}" alt="Media ${index + 1}">
-            <div class="media-overlay">
-                <button class="btn btn-secondary" onclick="deleteMedia(${index})">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-        </div>
-    `).join('');
-}
-
-// Delete Media
-function deleteMedia(index) {
-    if (confirm('Are you sure you want to delete this media? This action cannot be undone.')) {
-        try {
-            const posts = getLocalStorageItem(POSTS_KEY);
-            const drafts = getLocalStorageItem(DRAFTS_KEY);
-            
-            // Remove image from posts
-            posts.forEach(post => {
-                if (post.photos) {
-                    post.photos = post.photos.filter((_, i) => i !== index);
-                }
-            });
-            
-            // Remove image from drafts
-            drafts.forEach(draft => {
-                if (draft.photos) {
-                    draft.photos = draft.photos.filter((_, i) => i !== index);
-                }
-            });
-            
-            if (setLocalStorageItem(POSTS_KEY, posts) && setLocalStorageItem(DRAFTS_KEY, drafts)) {
-                showToast('Media deleted successfully');
-                loadMediaLibrary();
-            }
-        } catch (error) {
-            showToast('Error deleting media', 'error');
-            console.error('Delete error:', error);
-        }
-    }
-}
-
-// Upload Media
-function uploadMedia() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.multiple = true;
-    
-    input.onchange = function(e) {
-        const files = Array.from(e.target.files);
-        
-        // Validate file types and sizes
-        const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
-        const maxSize = 5 * 1024 * 1024; // 5MB
-        
-        const invalidFiles = files.filter(file => 
-            !validTypes.includes(file.type) || file.size > maxSize
-        );
-        
-        if (invalidFiles.length > 0) {
-            showToast('Please upload only images (JPEG, PNG, GIF) under 5MB', 'error');
-            return;
-        }
-
-        const photoPromises = files.map(file => 
-            new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (e) => resolve(e.target.result);
-                reader.onerror = () => reject(new Error('Failed to read file'));
-                reader.readAsDataURL(file);
-            })
-        );
-
-        Promise.all(photoPromises)
-            .then(newPhotos => {
-                const posts = getLocalStorageItem(POSTS_KEY);
-                const drafts = getLocalStorageItem(DRAFTS_KEY);
-                
-                // Add new photos to a temporary post
-                const tempPost = {
-                    title: 'Media Library',
-                    description: 'Temporary post for media storage',
-                    photos: newPhotos,
-                    date: new Date().toLocaleDateString(),
-                    lastModified: new Date().toISOString()
-                };
-                
-                posts.push(tempPost);
-                
-                if (setLocalStorageItem(POSTS_KEY, posts)) {
-                    showToast('Media uploaded successfully');
-                    loadMediaLibrary();
-                }
-            })
-            .catch(error => {
-                showToast('Error uploading media', 'error');
-                console.error('Upload error:', error);
-            });
-    };
-    
-    input.click();
-}
-
-// Analytics Functions
-function loadAnalytics() {
-    try {
-        const posts = getLocalStorageItem(POSTS_KEY);
-        const analyticsRange = document.getElementById('analyticsRange').value;
-        
-        // Traffic Overview Chart
-        const trafficCtx = document.getElementById('trafficChart');
-        if (!trafficCtx) {
-            console.error('Traffic chart canvas not found');
-            return;
-        }
-
-        const dates = Array.from({length: parseInt(analyticsRange)}, (_, i) => {
-            const date = new Date();
-            date.setDate(date.getDate() - i);
-            return date.toLocaleDateString();
-        }).reverse();
-
-        const trafficData = dates.map(date => {
-            return posts.reduce((sum, post) => {
-                return sum + (post.views?.[date] || 0);
-            }, 0);
-        });
-
-        // Destroy existing chart if it exists
-        if (window.trafficChart) {
-            window.trafficChart.destroy();
-        }
-
-        window.trafficChart = new Chart(trafficCtx.getContext('2d'), {
-            type: 'line',
-            data: {
-                labels: dates,
-                datasets: [{
-                    label: 'Daily Views',
-                    data: trafficData,
-                    borderColor: '#4CAF50',
-                    tension: 0.4,
-                    fill: true,
-                    backgroundColor: 'rgba(76, 175, 80, 0.1)'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            stepSize: 1
-                        }
-                    }
-                }
-            }
-        });
-
-        // User Engagement Chart
-        const engagementCtx = document.getElementById('engagementChart');
-        if (!engagementCtx) {
-            console.error('Engagement chart canvas not found');
-            return;
-        }
-
-        const engagementData = {
-            views: posts.reduce((sum, post) => sum + (Object.values(post.views || {}).reduce((s, v) => s + v, 0)), 0),
-            likes: posts.reduce((sum, post) => sum + (post.likes?.length || 0), 0),
-            comments: posts.reduce((sum, post) => sum + (post.comments?.length || 0), 0)
-        };
-
-        // Destroy existing chart if it exists
-        if (window.engagementChart) {
-            window.engagementChart.destroy();
-        }
-
-        window.engagementChart = new Chart(engagementCtx.getContext('2d'), {
-            type: 'doughnut',
-            data: {
-                labels: ['Views', 'Likes', 'Comments'],
-                datasets: [{
-                    data: [engagementData.views, engagementData.likes, engagementData.comments],
-                    backgroundColor: ['#4CAF50', '#2196F3', '#FFC107']
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'bottom',
-                    }
-                }
-            }
-        });
-
-        // Popular Posts
-        const popularPosts = document.getElementById('popularPosts');
-        const sortedPosts = [...posts].sort((a, b) => {
-            const viewsA = Object.values(a.views || {}).reduce((sum, val) => sum + val, 0);
-            const viewsB = Object.values(b.views || {}).reduce((sum, val) => sum + val, 0);
-            return viewsB - viewsA;
-        }).slice(0, 5);
-
-        popularPosts.innerHTML = sortedPosts.map(post => `
-            <div class="popular-post-item">
-                <h4>${post.title}</h4>
-                <p>${Object.values(post.views || {}).reduce((sum, val) => sum + val, 0)} views</p>
-                <small>${post.date}</small>
-            </div>
-        `).join('');
-    } catch (error) {
-        console.error('Error loading analytics:', error);
-        showToast('Error loading analytics data', 'error');
-    }
-}
-
-// Add event listener for analytics range change
-document.getElementById('analyticsRange').addEventListener('change', loadAnalytics);
-
-// Settings Functions
-function loadSettings() {
-    // Load profile settings
-    const editorName = localStorage.getItem('editor_name') || 'Editor Name';
-    const editorEmail = localStorage.getItem('editor_email') || 'editor@example.com';
-    
-    document.querySelector('#profileForm input[type="text"]').value = editorName;
-    document.querySelector('#profileForm input[type="email"]').value = editorEmail;
-
-    // Load notification settings
-    const notifications = JSON.parse(localStorage.getItem('notification_settings') || '{}');
-    document.querySelectorAll('#notificationForm input[type="checkbox"]').forEach(checkbox => {
-        checkbox.checked = notifications[checkbox.value] !== false;
-    });
-}
-
-// Save Settings
-document.getElementById('profileForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const name = this.querySelector('input[type="text"]').value;
-    const email = this.querySelector('input[type="email"]').value;
-    
-    localStorage.setItem('editor_name', name);
-    localStorage.setItem('editor_email', email);
-    
-    showToast('Profile settings saved successfully');
-});
-
-document.getElementById('notificationForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const settings = {};
-    this.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-        settings[checkbox.value] = checkbox.checked;
-    });
-    
-    localStorage.setItem('notification_settings', JSON.stringify(settings));
-    showToast('Notification settings saved successfully');
-});
-
-// Form Validation
-function validateForm() {
-    const title = titleInput.value.trim();
-    const description = descriptionInput.value.trim();
-
-    if (!title) {
-        showToast('Please enter a title', 'error');
-        titleInput.focus();
-        return false;
-    }
-
-    if (!description) {
-        showToast('Please enter post content', 'error');
-        descriptionInput.focus();
-        return false;
-    }
-
-    return true;
+    updateSidebarProfile();
 }
 
 // LocalStorage Helper Functions
@@ -570,128 +114,276 @@ function setLocalStorageItem(key, value) {
         return true;
     } catch (error) {
         console.error(`Error writing to localStorage (${key}):`, error);
-        showToast('Error saving data. Please check your browser storage settings.', 'error');
+        showToast('Storage limit reached. Please clear some data.', 'error');
         return false;
     }
 }
 
-// Save Post
-async function savePost(e) {
-    e.preventDefault();
-    
-    if (!validateForm()) return;
+// Text Formatting Functions
+function formatText(command) {
+    document.execCommand(command, false, null);
+    descriptionInput.focus();
+}
 
-    const title = titleInput.value.trim();
-    const description = descriptionInput.value.trim();
-    const editIndex = editIndexInput.value;
-    const isDraft = currentSection === 'drafts';
-
-    try {
-        let posts = getLocalStorageItem(isDraft ? DRAFTS_KEY : POSTS_KEY);
-        let post = {
-            title,
-            description,
-            date: new Date().toLocaleDateString(),
-            lastModified: new Date().toISOString(),
-            photos: currentPhotos,
-            author: 'Editor',
-            likes: [],
-            comments: [],
-            status: isDraft ? 'draft' : 'published'
-        };
-
-        if (photoInput.files && photoInput.files.length > 0) {
-            const newPhotos = await Promise.all(
-                Array.from(photoInput.files).map(file => 
-                    new Promise((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = (e) => resolve(e.target.result);
-                        reader.onerror = () => reject(new Error('Failed to read file'));
-                        reader.readAsDataURL(file);
-                    })
-                )
-            );
-
-            if (editIndex === "-1") {
-                post.photos = currentPhotos.length > 0 ? currentPhotos : newPhotos;
-                posts.push(post);
-            } else {
-                const existingPhotos = posts[editIndex].photos || [];
-                posts[editIndex] = {
-                    ...posts[editIndex],
-                    ...post,
-                    photos: [...existingPhotos, ...newPhotos]
-                };
-                if (currentPhotos.length > 0) {
-                    posts[editIndex].photos = currentPhotos;
-                }
-            }
-        } else {
-            if (editIndex === "-1") {
-                post.photos = currentPhotos;
-                posts.push(post);
-            } else {
-                posts[editIndex] = {
-                    ...posts[editIndex],
-                    ...post,
-                    photos: currentPhotos.length > 0 ? currentPhotos : posts[editIndex].photos
-                };
-            }
-        }
-
-        if (setLocalStorageItem(isDraft ? DRAFTS_KEY : POSTS_KEY, posts)) {
-            showToast(editIndex === "-1" ? 'Post created successfully!' : 'Post updated successfully!');
-            clearForm();
-            displayPosts();
-        }
-    } catch (error) {
-        showToast('An error occurred while saving the post', 'error');
-        console.error('Save error:', error);
+function insertLink() {
+    const url = prompt('Enter the URL:');
+    if (url) {
+        document.execCommand('createLink', false, url);
+        descriptionInput.focus();
     }
 }
 
-// Display Posts
-function displayPosts(searchTerm = '') {
-    const postList = document.getElementById('postList');
+function triggerPhotoUpload() {
+    photoInput.click();
+}
+
+// Update Sidebar Profile
+function updateSidebarProfile() {
+    try {
+        const editorName = localStorage.getItem('editor_name') || 'Editor Name';
+        const profileImageElement = document.querySelector('.editor-profile .profile-image');
+        
+        if (!editorNameDisplay || !profileImageElement) {
+            console.error('Sidebar profile elements not found');
+            showToast('Error updating profile display', 'error');
+            return;
+        }
+
+        console.log('Updating sidebar with name:', editorName, 'and picture:', profilePicture);
+        editorNameDisplay.textContent = editorName;
+        profileImageElement.src = profilePicture;
+    } catch (error) {
+        console.error('Error updating sidebar profile:', error);
+        showToast('Error updating profile display', 'error');
+    }
+}
+
+// Dashboard Functions
+function loadDashboard() {
     const posts = getLocalStorageItem(POSTS_KEY);
+    const drafts = getLocalStorageItem(DRAFTS_KEY);
+    const range = timeRangeSelect.value;
+
+    let filteredPosts = posts;
+    const now = new Date();
+    switch(range) {
+        case 'today':
+            filteredPosts = posts.filter(p => new Date(p.date).toDateString() === now.toDateString());
+            break;
+        case 'week':
+            const weekAgo = new Date(now);
+            weekAgo.setDate(now.getDate() - 7);
+            filteredPosts = posts.filter(p => new Date(p.date) >= weekAgo);
+            break;
+        case 'month':
+            const monthAgo = new Date(now);
+            monthAgo.setMonth(now.getMonth() - 1);
+            filteredPosts = posts.filter(p => new Date(p.date) >= monthAgo);
+            break;
+    }
+
+    document.getElementById('totalPosts').textContent = filteredPosts.length;
+    document.getElementById('totalViews').textContent = filteredPosts.reduce((sum, post) => sum + (post.views || 0), 0);
+    document.getElementById('totalComments').textContent = filteredPosts.reduce((sum, post) => sum + (post.comments?.length || 0), 0);
+    document.getElementById('totalLikes').textContent = filteredPosts.reduce((sum, post) => sum + (post.likes?.length || 0), 0);
+    draftCountBadge.textContent = drafts.length;
+    postCountBadge.textContent = posts.length;
+
+    updateViewsChart();
+    updateTopPosts();
+    updateTabContent('overview');
+    updateSidebarProfile();
+}
+
+// Tab Navigation for Dashboard
+document.querySelectorAll('.tab-button').forEach(button => {
+    button.addEventListener('click', () => {
+        const tab = button.dataset.tab;
+        updateTabContent(tab);
+    });
+});
+
+function updateTabContent(tab) {
+    document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
     
-    postList.innerHTML = '';
-    
+    document.querySelector(`.tab-button[data-tab="${tab}"]`).classList.add('active');
+    document.getElementById(`${tab}-tab`).classList.add('active');
+
+    switch(tab) {
+        case 'overview':
+            updateViewsChart();
+            updateTopPosts();
+            break;
+        case 'activity':
+            updateActivityLog();
+            break;
+        case 'performance':
+            updateEngagementChart();
+            updatePerformanceList();
+            break;
+        case 'trends':
+            updateTrendsChart();
+            updateActivityTrendChart();
+            break;
+    }
+}
+
+// Chart Functions
+function updateViewsChart() {
+    const ctx = document.getElementById('viewsChart').getContext('2d');
+    const posts = getLocalStorageItem(POSTS_KEY);
+    const range = timeRangeSelect.value;
+    let days = 7;
+    if (range === 'month') days = 30;
+    else if (range === 'year') days = 365;
+
+    const dates = Array.from({length: days}, (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        return date.toLocaleDateString();
+    }).reverse();
+
+    const viewsData = dates.map(date => posts.reduce((sum, post) => sum + (post.views?.[date] || 0), 0));
+
+    if (window.viewsChart) window.viewsChart.destroy();
+    window.viewsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: [{ label: 'Views', data: viewsData, borderColor: '#4CAF50', tension: 0.4 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+    });
+}
+
+function updateTopPosts() {
+    const topPosts = document.getElementById('topPosts');
+    const posts = getLocalStorageItem(POSTS_KEY);
+    const sortedPosts = [...posts].sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 5);
+    topPosts.innerHTML = sortedPosts.map(post => `
+        <div class="top-post-item">
+            <h4>${post.title}</h4>
+            <p>${post.views || 0} views</p>
+        </div>
+    `).join('');
+}
+
+function updateActivityLog() {
+    const activityList = document.getElementById('activityList');
+    const posts = getLocalStorageItem(POSTS_KEY);
+    const drafts = getLocalStorageItem(DRAFTS_KEY);
+    const activities = [...posts, ...drafts]
+        .sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified))
+        .slice(0, 10)
+        .map(item => `
+            <div class="activity-item">
+                <span><i class="fas fa-file-alt"></i> ${item.title} - ${item.status || 'draft'}</span>
+                <span>${new Date(item.lastModified).toLocaleString()}</span>
+            </div>
+        `);
+    activityList.innerHTML = activities.join('');
+}
+
+function updateEngagementChart() {
+    const ctx = document.getElementById('engagementChart').getContext('2d');
+    const posts = getLocalStorageItem(POSTS_KEY);
+    const data = {
+        views: posts.reduce((sum, post) => sum + (post.views || 0), 0),
+        likes: posts.reduce((sum, post) => sum + (post.likes?.length || 0), 0),
+        comments: posts.reduce((sum, post) => sum + (post.comments?.length || 0), 0)
+    };
+
+    if (window.engagementChart) window.engagementChart.destroy();
+    window.engagementChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Views', 'Likes', 'Comments'],
+            datasets: [{ data: [data.views, data.likes, data.comments], backgroundColor: ['#4CAF50', '#2196F3', '#FFC107'] }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
+}
+
+function updatePerformanceList() {
+    const performanceList = document.getElementById('performanceList');
+    const posts = getLocalStorageItem(POSTS_KEY);
+    const sortedPosts = [...posts].sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 5);
+    performanceList.innerHTML = sortedPosts.map(post => `
+        <div class="performance-item">
+            <h4>${post.title}</h4>
+            <p>Views: ${post.views || 0} | Likes: ${post.likes?.length || 0} | Comments: ${post.comments?.length || 0}</p>
+        </div>
+    `).join('');
+}
+
+function updateTrendsChart() {
+    const ctx = document.getElementById('trendsChart').getContext('2d');
+    const posts = getLocalStorageItem(POSTS_KEY);
+    const dates = Array.from({length: 30}, (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        return date.toLocaleDateString();
+    }).reverse();
+
+    const viewsData = dates.map(date => posts.reduce((sum, post) => sum + (post.views?.[date] || 0), 0));
+
+    if (window.trendsChart) window.trendsChart.destroy();
+    window.trendsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: [{ label: 'Views', data: viewsData, borderColor: '#4CAF50', tension: 0.4 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+    });
+}
+
+function updateActivityTrendChart() {
+    const ctx = document.getElementById('activityTrendChart').getContext('2d');
+    const posts = getLocalStorageItem(POSTS_KEY);
+    const drafts = getLocalStorageItem(DRAFTS_KEY);
+    const dates = Array.from({length: 30}, (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        return date.toLocaleDateString();
+    }).reverse();
+
+    const activityData = dates.map(date => 
+        [...posts, ...drafts].filter(item => new Date(item.lastModified).toLocaleDateString() === date).length
+    );
+
+    if (window.activityTrendChart) window.activityTrendChart.destroy();
+    window.activityTrendChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: dates,
+            datasets: [{ label: 'Activity', data: activityData, backgroundColor: '#4CAF50' }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+    });
+}
+
+// Posts Functions
+function displayPosts(searchTerm = '') {
+    const posts = getLocalStorageItem(POSTS_KEY);
     const filteredPosts = posts.filter(post => 
         post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         post.description.toLowerCase().includes(searchTerm.toLowerCase())
     );
-    
-    if (filteredPosts.length === 0) {
-        postList.innerHTML = '<div class="no-posts">No posts found</div>';
-        return;
-    }
-    
-    filteredPosts.forEach((post, index) => {
-        const postDiv = document.createElement('div');
-        postDiv.className = 'post-item';
-        const photoHTML = post.photos && post.photos.length > 0 
-            ? post.photos.map(photo => `<img src="${photo}" alt="Post Image" class="post-image">`).join('')
-            : '';
-        postDiv.innerHTML = `
-            <h3>${post.title}</h3>
-            <p>${post.description}</p>
-            ${photoHTML}
-            <div class="post-meta">
-                <span><i class="fas fa-calendar"></i> ${post.date}</span>
-                <span><i class="fas fa-clock"></i> Last modified: ${new Date(post.lastModified).toLocaleString()}</span>
-            </div>
-            <div class="post-actions">
-                <button class="btn btn-primary" onclick="editPost(${index})">
-                    <i class="fas fa-edit"></i> Edit
-                </button>
-                <button class="btn btn-secondary" onclick="deletePost(${index})">
-                    <i class="fas fa-trash"></i> Delete
-                </button>
-            </div>
-        `;
-        postList.appendChild(postDiv);
-    });
+
+    postsList.innerHTML = filteredPosts.length === 0 ? '<tr><td colspan="5">No posts found</td></tr>' : filteredPosts.map((post, index) => `
+        <tr>
+            <td>${post.title}</td>
+            <td>${post.status}</td>
+            <td>${new Date(post.date).toLocaleDateString()}</td>
+            <td>${post.views || 0}</td>
+            <td>
+                <button class="btn btn-primary" onclick="editPost(${index})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-secondary" onclick="deletePost(${index})"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>
+    `).join('');
 }
 
 // Edit Post
@@ -701,7 +393,9 @@ function editPost(index) {
     
     titleInput.value = post.title;
     descriptionInput.value = post.description;
+    postStatusSelect.value = post.status;
     editIndexInput.value = index;
+    editIndexInput.dataset.source = 'posts';
     currentPhotos = [...(post.photos || [])];
     
     showSection('new-post');
@@ -711,16 +405,156 @@ function editPost(index) {
 
 // Delete Post
 function deletePost(index) {
-    if (confirm('Are you sure you want to delete this post? This action cannot be undone.')) {
-        try {
-            let posts = getLocalStorageItem(POSTS_KEY);
-            posts.splice(index, 1);
-            setLocalStorageItem(POSTS_KEY, posts);
+    if (confirm('Are you sure you want to delete this post?')) {
+        const posts = getLocalStorageItem(POSTS_KEY);
+        posts.splice(index, 1);
+        if (setLocalStorageItem(POSTS_KEY, posts)) {
             showToast('Post deleted successfully');
             displayPosts(searchInput.value);
-        } catch (error) {
-            showToast('Error deleting post', 'error');
-            console.error('Delete error:', error);
+            loadDashboard();
+        }
+    }
+}
+
+// Drafts Functions
+function displayDrafts(searchTerm = '') {
+    const drafts = getLocalStorageItem(DRAFTS_KEY);
+    const filteredDrafts = drafts.filter(draft => 
+        (draft.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (draft.description || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    draftsList.innerHTML = filteredDrafts.length === 0 ? '<tr><td colspan="5">No drafts found</td></tr>' : filteredDrafts.map((draft, index) => `
+        <tr>
+            <td>${draft.title || 'Untitled'}</td>
+            <td>${draft.status || 'draft'}</td>
+            <td>${draft.date ? new Date(draft.date).toLocaleDateString() : new Date().toLocaleDateString()}</td>
+            <td>${draft.views || 0}</td>
+            <td>
+                <button class="btn btn-primary" onclick="editDraft(${index})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-secondary" onclick="deleteDraft(${index})"><i class="fas fa-trash"></i></button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// Edit Draft
+function editDraft(index) {
+    const drafts = getLocalStorageItem(DRAFTS_KEY);
+    const draft = drafts[index];
+    
+    if (!draft) {
+        showToast('Draft not found', 'error');
+        return;
+    }
+
+    titleInput.value = draft.title || '';
+    descriptionInput.value = draft.description || '';
+    postStatusSelect.value = draft.status || 'draft';
+    editIndexInput.value = index;
+    editIndexInput.dataset.source = 'drafts';
+    currentPhotos = [...(draft.photos || [])];
+    
+    showSection('new-post');
+    previewPhotos(currentPhotos);
+    cancelBtn.style.display = 'inline-block';
+}
+
+// Delete Draft
+function deleteDraft(index) {
+    if (confirm('Are you sure you want to delete this draft?')) {
+        const drafts = getLocalStorageItem(DRAFTS_KEY);
+        if (index < 0 || index >= drafts.length) {
+            showToast('Invalid draft index', 'error');
+            return;
+        }
+        
+        drafts.splice(index, 1);
+        if (setLocalStorageItem(DRAFTS_KEY, drafts)) {
+            showToast('Draft deleted successfully');
+            displayDrafts();
+            loadDashboard();
+        }
+    }
+}
+
+// Save Post
+async function savePost(e) {
+    e.preventDefault();
+    
+    if (!titleInput.value.trim() || !descriptionInput.value.trim()) {
+        showToast('Please fill in all required fields', 'error');
+        return;
+    }
+
+    const post = {
+        id: editIndexInput.value === '-1' ? Date.now().toString() : undefined,
+        title: titleInput.value.trim(),
+        description: descriptionInput.value.trim(),
+        date: new Date().toISOString(),
+        lastModified: new Date().toISOString(),
+        photos: [...currentPhotos],
+        status: postStatusSelect.value,
+        author: localStorage.getItem('editor_name') || 'Editor Name', // Set author
+        views: 0,
+        likes: [],
+        comments: []
+    };
+
+    const editIndex = parseInt(editIndexInput.value);
+    const isDraft = post.status === 'draft';
+    const storageKey = isDraft ? DRAFTS_KEY : POSTS_KEY;
+    const source = editIndexInput.dataset.source;
+    let items = getLocalStorageItem(storageKey);
+
+    if (editIndex === -1) {
+        post.id = Date.now().toString();
+        items.push(post);
+        if (setLocalStorageItem(storageKey, items)) {
+            showToast('Post created successfully');
+            clearForm();
+            showSection(isDraft ? 'drafts' : 'posts');
+            loadDashboard();
+        }
+    } else {
+        const existingItem = source === 'posts' ? getLocalStorageItem(POSTS_KEY)[editIndex] : getLocalStorageItem(DRAFTS_KEY)[editIndex];
+        post.id = existingItem.id;
+        post.views = existingItem.views || 0;
+        post.likes = existingItem.likes || [];
+        post.comments = existingItem.comments || [];
+
+        if (source === 'drafts' && !isDraft) {
+            const drafts = getLocalStorageItem(DRAFTS_KEY);
+            drafts.splice(editIndex, 1);
+            setLocalStorageItem(DRAFTS_KEY, drafts);
+            const posts = getLocalStorageItem(POSTS_KEY);
+            posts.push(post);
+            if (setLocalStorageItem(POSTS_KEY, posts)) {
+                showToast('Post published successfully');
+                clearForm();
+                showSection('posts');
+                loadDashboard();
+            }
+        } else if (source === 'posts' && isDraft) {
+            const posts = getLocalStorageItem(POSTS_KEY);
+            posts.splice(editIndex, 1);
+            setLocalStorageItem(POSTS_KEY, posts);
+            const drafts = getLocalStorageItem(DRAFTS_KEY);
+            drafts.push(post);
+            if (setLocalStorageItem(DRAFTS_KEY, drafts)) {
+                showToast('Post moved to drafts');
+                clearForm();
+                showSection('drafts');
+                loadDashboard();
+            }
+        } else {
+            items[editIndex] = post;
+            if (setLocalStorageItem(storageKey, items)) {
+                showToast('Post updated successfully');
+                clearForm();
+                showSection(isDraft ? 'drafts' : 'posts');
+                loadDashboard();
+            }
         }
     }
 }
@@ -731,6 +565,7 @@ function clearForm() {
     currentPhotos = [];
     document.getElementById('photoPreview').innerHTML = '';
     editIndexInput.value = '-1';
+    editIndexInput.dataset.source = '';
     formTitle.textContent = 'Create New Post';
     cancelBtn.style.display = 'none';
 }
@@ -746,7 +581,7 @@ function previewPhotos(photos) {
     const preview = document.getElementById('photoPreview');
     preview.innerHTML = photos.map(photo => `
         <div class="preview-item">
-            <img src="${photo}" alt="Preview">
+            <img src="${photo}" alt="Preview" loading="lazy">
             <button type="button" class="remove-photo" onclick="removePhoto('${photo}')">
                 <i class="fas fa-times"></i>
             </button>
@@ -760,98 +595,294 @@ function removePhoto(photo) {
     previewPhotos(currentPhotos);
 }
 
-// Search Posts
-searchInput.addEventListener('input', (e) => {
-    displayPosts(e.target.value);
+// Media Library Functions
+function loadMediaLibrary(searchTerm = '') {
+    const mediaGrid = document.getElementById('mediaGrid');
+    const posts = getLocalStorageItem(POSTS_KEY);
+    const drafts = getLocalStorageItem(DRAFTS_KEY);
+    let allImages = [...posts, ...drafts].flatMap(item => item.photos || []);
+    
+    if (searchTerm) {
+        allImages = allImages.filter((image, index) => `media ${index + 1}`.toLowerCase().includes(searchTerm.toLowerCase()));
+    }
+
+    mediaGrid.innerHTML = allImages.length === 0 ? '<div class="no-media">No media found</div>' : allImages.map((image, index) => `
+        <div class="media-item">
+            <img src="${image}" alt="Media ${index + 1}" loading="lazy">
+            <div class="media-overlay">
+                <button class="btn btn-secondary" onclick="deleteMedia('${image}')"><i class="fas fa-trash"></i></button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function searchMedia() {
+    const searchTerm = searchMediaInput.value;
+    loadMediaLibrary(searchTerm);
+}
+
+function deleteMedia(image) {
+    if (confirm('Are you sure you want to delete this media?')) {
+        const posts = getLocalStorageItem(POSTS_KEY);
+        const drafts = getLocalStorageItem(DRAFTS_KEY);
+        
+        posts.forEach(post => post.photos = post.photos?.filter(p => p !== image) || []);
+        drafts.forEach(draft => draft.photos = draft.photos?.filter(p => p !== image) || []);
+        
+        if (setLocalStorageItem(POSTS_KEY, posts) && setLocalStorageItem(DRAFTS_KEY, drafts)) {
+            showToast('Media deleted successfully');
+            loadMediaLibrary(searchMediaInput.value);
+        }
+    }
+}
+
+function uploadMedia() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    
+    input.onchange = async (e) => {
+        const files = Array.from(e.target.files);
+        const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
+        const maxSize = 5 * 1024 * 1024;
+        
+        if (files.some(file => !validTypes.includes(file.type) || file.size > maxSize)) {
+            showToast('Only JPEG, PNG, GIF under 5MB allowed', 'error');
+            return;
+        }
+
+        const newPhotos = await Promise.all(files.map(file => new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.readAsDataURL(file);
+        })));
+
+        currentPhotos = [...currentPhotos, ...newPhotos];
+        previewPhotos(currentPhotos);
+        showToast('Media uploaded to current post');
+    };
+    
+    input.click();
+}
+
+// Analytics Functions
+function loadAnalytics() {
+    const range = parseInt(document.getElementById('analyticsRange').value);
+    const posts = getLocalStorageItem(POSTS_KEY);
+    const dates = Array.from({length: range}, (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        return date.toLocaleDateString();
+    }).reverse();
+
+    const trafficData = dates.map(date => posts.reduce((sum, post) => sum + (post.views?.[date] || 0), 0));
+    const ctxTraffic = document.getElementById('trafficChart').getContext('2d');
+    if (window.trafficChart) window.trafficChart.destroy();
+    window.trafficChart = new Chart(ctxTraffic, {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: [{ label: 'Views', data: trafficData, borderColor: '#4CAF50', tension: 0.4 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+    });
+
+    const engagementData = {
+        views: posts.reduce((sum, post) => sum + (post.views || 0), 0),
+        likes: posts.reduce((sum, post) => sum + (post.likes?.length || 0), 0),
+        comments: posts.reduce((sum, post) => sum + (post.comments?.length || 0), 0)
+    };
+    const ctxEngagement = document.getElementById('engagementChart').getContext('2d');
+    if (window.engagementChart) window.engagementChart.destroy();
+    window.engagementChart = new Chart(ctxEngagement, {
+        type: 'doughnut',
+        data: {
+            labels: ['Views', 'Likes', 'Comments'],
+            datasets: [{ data: [engagementData.views, engagementData.likes, engagementData.comments], backgroundColor: ['#4CAF50', '#2196F3', '#FFC107'] }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
+
+    const popularPosts = document.getElementById('popularPosts');
+    popularPosts.innerHTML = [...posts].sort((a, b) => (b.views || 0) - (a.views || 0)).slice(0, 5).map(post => `
+        <div class="popular-post-item">
+            <h4>${post.title}</h4>
+            <p>${post.views || 0} views</p>
+        </div>
+    `).join('');
+}
+
+// Settings Functions
+function loadSettings() {
+    try {
+        const editorName = localStorage.getItem('editor_name') || 'Editor Name';
+        const editorEmail = localStorage.getItem('editor_email') || 'editor@example.com';
+        const notifications = JSON.parse(localStorage.getItem('editor_notifications')) || {
+            comments: true,
+            views: true,
+            weeklyReport: false
+        };
+
+        document.getElementById('editorNameInput').value = editorName;
+        document.getElementById('editorEmail').value = editorEmail;
+        profilePreview.src = profilePicture;
+        
+        document.querySelector('input[name="comments"]').checked = notifications.comments;
+        document.querySelector('input[name="views"]').checked = notifications.views;
+        document.querySelector('input[name="weeklyReport"]').checked = notifications.weeklyReport;
+
+        updateSidebarProfile();
+    } catch (error) {
+        console.error('Error loading settings:', error);
+        showToast('Error loading settings', 'error');
+    }
+}
+
+function uploadProfilePicture() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
+        const maxSize = 2 * 1024 * 1024;
+
+        if (!validTypes.includes(file.type) || file.size > maxSize) {
+            showToast('Only JPEG, PNG, GIF under 2MB allowed', 'error');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                profilePicture = e.target.result;
+                localStorage.setItem('editor_profile_picture', profilePicture);
+                console.log('Profile picture saved to localStorage:', profilePicture);
+                profilePreview.src = profilePicture;
+                updateSidebarProfile();
+                showToast('Profile picture updated');
+            } catch (error) {
+                console.error('Error uploading profile picture:', error);
+                showToast('Error updating profile picture', 'error');
+            }
+        };
+        reader.readAsDataURL(file);
+    };
+
+    input.click();
+}
+
+function saveProfileSettings(e) {
+    e.preventDefault();
+    try {
+        const name = document.getElementById('editorNameInput').value.trim();
+        const email = document.getElementById('editorEmail').value.trim();
+
+        if (!name || !email) {
+            showToast('Please fill in all fields', 'error');
+            return;
+        }
+
+        if (!/\S+@\S+\.\S+/.test(email)) {
+            showToast('Please enter a valid email', 'error');
+            return;
+        }
+
+        localStorage.setItem('editor_name', name);
+        localStorage.setItem('editor_email', email);
+        console.log('Profile saved to localStorage - Name:', name, 'Email:', email);
+        updateSidebarProfile();
+        showToast('Profile settings saved');
+    } catch (error) {
+        console.error('Error saving profile settings:', error);
+        showToast('Error saving profile settings', 'error');
+    }
+}
+
+function saveNotificationSettings(e) {
+    e.preventDefault();
+    try {
+        const notifications = {
+            comments: document.querySelector('input[name="comments"]').checked,
+            views: document.querySelector('input[name="views"]').checked,
+            weeklyReport: document.querySelector('input[name="weeklyReport"]').checked
+        };
+
+        localStorage.setItem('editor_notifications', JSON.stringify(notifications));
+        showToast('Notification preferences saved');
+    } catch (error) {
+        console.error('Error saving notification settings:', error);
+        showToast('Error saving notification preferences', 'error');
+    }
+}
+
+// Event Listeners
+form.addEventListener('submit', savePost);
+photoInput.addEventListener('change', async (e) => {
+    const files = Array.from(e.target.files);
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
+    const maxSize = 5 * 1024 * 1024;
+
+    if (files.some(file => !validTypes.includes(file.type) || file.size > maxSize)) {
+        showToast('Only JPEG, PNG, GIF under 5MB allowed', 'error');
+        photoInput.value = '';
+        return;
+    }
+
+    const newPhotos = await Promise.all(files.map(file => new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.readAsDataURL(file);
+    })));
+    currentPhotos = [...currentPhotos, ...newPhotos];
+    previewPhotos(currentPhotos);
 });
 
-// Logout
-logoutBtn.addEventListener('click', (e) => {
-    e.preventDefault();
+searchInput.addEventListener('input', (e) => displayPosts(e.target.value));
+logoutBtn.addEventListener('click', () => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(ROLE_KEY);
     window.location.href = '../editorlog.html';
 });
 
-// Event Listeners
-form.addEventListener('submit', savePost);
-photoInput.addEventListener('change', function(e) {
-    const files = Array.from(e.target.files);
-    
-    // Validate file types and sizes
-    const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
-    const maxSize = 5 * 1024 * 1024; // 5MB
-    
-    const invalidFiles = files.filter(file => 
-        !validTypes.includes(file.type) || file.size > maxSize
-    );
-    
-    if (invalidFiles.length > 0) {
-        showToast('Please upload only images (JPEG, PNG, GIF) under 5MB', 'error');
-        this.value = ''; // Clear the input
-        return;
-    }
-
-    const photoPromises = files.map(file => 
-        new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => resolve(e.target.result);
-            reader.onerror = () => reject(new Error('Failed to read file'));
-            reader.readAsDataURL(file);
-        })
-    );
-
-    Promise.all(photoPromises)
-        .then(newPhotos => {
-            const editIndex = editIndexInput.value;
-            if (editIndex !== "-1") {
-                currentPhotos = [...currentPhotos, ...newPhotos];
-            } else {
-                currentPhotos = newPhotos;
-            }
-            previewPhotos(currentPhotos);
-        })
-        .catch(error => {
-            showToast('Error processing images. Please try again.', 'error');
-            console.error('Photo processing error:', error);
-            this.value = ''; // Clear the input
-        });
-});
-
-// Hamburger Menu Functionality
+// Hamburger Menu
 const hamburgerMenu = document.querySelector('.hamburger-menu');
 const sidebar = document.querySelector('.sidebar');
 const overlay = document.querySelector('.sidebar-overlay');
 
 function toggleMenu() {
-    hamburgerMenu.classList.toggle('active');
-    sidebar.classList.toggle('show');
-    overlay.classList.toggle('show');
-    document.body.style.overflow = sidebar.classList.contains('show') ? 'hidden' : '';
+    const isOpen = hamburgerMenu.classList.toggle('active');
+    sidebar.classList.toggle('show', isOpen);
+    overlay.classList.toggle('show', isOpen);
+    document.body.style.overflow = isOpen ? 'hidden' : '';
+    hamburgerMenu.setAttribute('aria-expanded', isOpen);
 }
 
 hamburgerMenu.addEventListener('click', toggleMenu);
 overlay.addEventListener('click', toggleMenu);
-
-// Close menu when clicking on a menu item
-const menuItems = document.querySelectorAll('.sidebar-menu a');
-menuItems.forEach(item => {
-    item.addEventListener('click', () => {
-        if (window.innerWidth <= 768) {
-            toggleMenu();
-        }
-    });
+document.querySelectorAll('.sidebar-menu a').forEach(item => {
+    item.addEventListener('click', () => window.innerWidth <= 768 && toggleMenu());
 });
 
-// Close menu on window resize if open
 window.addEventListener('resize', () => {
     if (window.innerWidth > 768 && sidebar.classList.contains('show')) {
         toggleMenu();
     }
 });
 
+// Keyboard Navigation
+document.querySelectorAll('.sidebar-menu a').forEach(link => {
+    link.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            link.click();
+        }
+    });
+});
+
 // Initialize
 checkAuth();
-displayPosts();
-
-
+updateSidebarProfile();
+showSection('dashboard');
