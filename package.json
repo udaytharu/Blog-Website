@@ -1,16 +1,20 @@
 {
   "name": "blog-website-main",
   "version": "1.0.0",
-  "description": "practice",
-  "main": "script.js",
+  "description": "Blog platform for sharing thoughts, photos, and stories",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["blog", "express", "mongodb"],
+  "author": "uday-studio",
   "license": "ISC",
   "dependencies": {
-    "express": "^5.1.0"
+    "compression": "^1.7.4",
+    "dotenv": "^16.4.5",
+    "express": "^5.1.0",
+    "helmet": "^8.0.0",
+    "mongodb": "^6.8.0"
   }
 }

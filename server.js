@@ -1,12 +1,38 @@
 const express = require('express');
 const path = require('path');
+const { MongoClient } = require('mongodb');
+const dotenv = require('dotenv');
+const helmet = require('helmet');
+const compression = require('compression');
+
+dotenv.config();
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+const MONGODB_URI = process.env.MONGODB_URI;
+const VALID_EDITOR_USERNAME = process.env.EDITOR_USERNAME;
+const VALID_EDITOR_PASSWORD = process.env.EDITOR_PASSWORD;
 
-// Middleware to parse JSON bodies
+let db;
+
+// Connect to MongoDB
+async function connectDB() {
+    try {
+        const client = new MongoClient(MONGODB_URI);
+        await client.connect();
+        console.log('Connected to MongoDB');
+        db = client.db('blogDB');
+    } catch (error) {
+        console.error('MongoDB connection failed:', error);
+        process.exit(1);
+    }
+}
+connectDB();
+
+// Middleware
 app.use(express.json());
-
-// Basic security middleware
+app.use(helmet());
+app.use(compression());
 app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
@@ -14,43 +40,37 @@ app.use((req, res, next) => {
     next();
 });
 
-// Serve static files from the project root and subdirectories
+// Serve static files
 app.use(express.static(path.join(__dirname)));
 app.use('/editor_login_page', express.static(path.join(__dirname, 'editor_login_page')));
 app.use('/user_login_page', express.static(path.join(__dirname, 'user_login_page')));
 app.use('/editor_page', express.static(path.join(__dirname, 'editor_page')));
 app.use('/user_page', express.static(path.join(__dirname, 'user_page')));
 
-// In-memory data store (replace with a database in production)
-const dataStore = {
-    posts: [],
-    drafts: [],
-    users: new Map()
-};
-
-// Serve the main index.html
+// Serve index.html
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // API to get posts
-app.get('/api/posts', (req, res) => {
+app.get('/api/posts', async (req, res) => {
     try {
-        res.json(dataStore.posts);
+        const posts = await db.collection('posts').find().toArray();
+        res.json(posts);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch posts' });
     }
 });
 
 // API to save posts
-app.post('/api/posts', (req, res) => {
+app.post('/api/posts', async (req, res) => {
     try {
         const post = {
             id: Date.now().toString(),
             ...req.body,
             createdAt: new Date().toISOString()
         };
-        dataStore.posts.push(post);
+        await db.collection('posts').insertOne(post);
         res.status(201).json(post);
     } catch (error) {
         res.status(500).json({ error: 'Failed to save post' });
@@ -58,23 +78,24 @@ app.post('/api/posts', (req, res) => {
 });
 
 // API to get drafts
-app.get('/api/drafts', (req, res) => {
+app.get('/api/drafts', async (req, res) => {
     try {
-        res.json(dataStore.drafts);
+        const drafts = await db.collection('drafts').find().toArray();
+        res.json(drafts);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch drafts' });
     }
 });
 
 // API to save drafts
-app.post('/api/drafts', (req, res) => {
+app.post('/api/drafts', async (req, res) => {
     try {
         const draft = {
             id: Date.now().toString(),
             ...req.body,
             createdAt: new Date().toISOString()
         };
-        dataStore.drafts.push(draft);
+        await db.collection('drafts').insertOne(draft);
         res.status(201).json(draft);
     } catch (error) {
         res.status(500).json({ error: 'Failed to save draft' });
@@ -85,13 +106,9 @@ app.post('/api/drafts', (req, res) => {
 app.post('/api/editor/login', (req, res) => {
     try {
         const { username, password } = req.body;
-        const VALID_EDITOR_USERNAME = 'udaytharu';
-        const VALID_EDITOR_PASSWORD = '123@321!!uday';
-
         if (!username || !password) {
             return res.status(400).json({ error: 'Username and password are required' });
         }
-
         if (username === VALID_EDITOR_USERNAME && password === VALID_EDITOR_PASSWORD) {
             const token = Buffer.from(`${username}-${Date.now()}-${Math.random().toString(36).substr(2)}`).toString('base64');
             res.json({ token, role: 'editor' });
@@ -104,21 +121,20 @@ app.post('/api/editor/login', (req, res) => {
 });
 
 // API for user login
-app.post('/api/user/login', (req, res) => {
+app.post('/api/user/login', async (req, res) => {
     try {
         const { username } = req.body;
         if (!username) {
             return res.status(400).json({ error: 'Username is required' });
         }
-
-        let user = dataStore.users.get(username);
+        let user = await db.collection('users').findOne({ username });
         if (!user) {
             user = {
                 id: Date.now().toString(),
                 username,
                 joinDate: new Date().toISOString()
             };
-            dataStore.users.set(username, user);
+            await db.collection('users').insertOne(user);
         }
         res.json({ user });
     } catch (error) {
