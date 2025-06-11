@@ -1,38 +1,13 @@
 const express = require('express');
 const path = require('path');
-const { MongoClient } = require('mongodb');
-const dotenv = require('dotenv');
-const helmet = require('helmet');
-const compression = require('compression');
-
-dotenv.config();
-
+const fs = require('fs').promises;
 const app = express();
 const PORT = process.env.PORT || 3000;
-const MONGODB_URI = process.env.MONGODB_URI;
-const VALID_EDITOR_USERNAME = process.env.EDITOR_USERNAME;
-const VALID_EDITOR_PASSWORD = process.env.EDITOR_PASSWORD;
 
-let db;
-
-// Connect to MongoDB
-async function connectDB() {
-    try {
-        const client = new MongoClient(MONGODB_URI);
-        await client.connect();
-        console.log('Connected to MongoDB');
-        db = client.db('blogDB');
-    } catch (error) {
-        console.error('MongoDB connection failed:', error);
-        process.exit(1);
-    }
-}
-connectDB();
-
-// Middleware
+// Middleware to parse JSON bodies
 app.use(express.json());
-app.use(helmet());
-app.use(compression());
+
+// Basic security middleware
 app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
@@ -44,10 +19,23 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname)));
 app.use('/editor_login_page', express.static(path.join(__dirname, 'editor_login_page')));
 app.use('/user_login_page', express.static(path.join(__dirname, 'user_login_page')));
-app.use('/editor_page', express.static(path.join(__dirname, 'editor_page')));
-app.use('/user_page', express.static(path.join(__dirname, 'user_page')));
 
-// Serve index.html
+// Helper function to read data
+async function readData() {
+    try {
+        const data = await fs.readFile('posts.json', 'utf8');
+        return JSON.parse(data);
+    } catch (error) {
+        return { posts: [], drafts: [], users: [] };
+    }
+}
+
+// Helper function to write data
+async function writeData(data) {
+    await fs.writeFile('posts.json', JSON.stringify(data, null, 2));
+}
+
+// Serve the main index.html
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -55,8 +43,8 @@ app.get('/', (req, res) => {
 // API to get posts
 app.get('/api/posts', async (req, res) => {
     try {
-        const posts = await db.collection('posts').find().toArray();
-        res.json(posts);
+        const data = await readData();
+        res.json(data.posts);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch posts' });
     }
@@ -65,12 +53,14 @@ app.get('/api/posts', async (req, res) => {
 // API to save posts
 app.post('/api/posts', async (req, res) => {
     try {
+        const data = await readData();
         const post = {
             id: Date.now().toString(),
             ...req.body,
             createdAt: new Date().toISOString()
         };
-        await db.collection('posts').insertOne(post);
+        data.posts.push(post);
+        await writeData(data);
         res.status(201).json(post);
     } catch (error) {
         res.status(500).json({ error: 'Failed to save post' });
@@ -80,8 +70,8 @@ app.post('/api/posts', async (req, res) => {
 // API to get drafts
 app.get('/api/drafts', async (req, res) => {
     try {
-        const drafts = await db.collection('drafts').find().toArray();
-        res.json(drafts);
+        const data = await readData();
+        res.json(data.drafts);
     } catch (error) {
         res.status(500).json({ error: 'Failed to fetch drafts' });
     }
@@ -90,12 +80,14 @@ app.get('/api/drafts', async (req, res) => {
 // API to save drafts
 app.post('/api/drafts', async (req, res) => {
     try {
+        const data = await readData();
         const draft = {
             id: Date.now().toString(),
             ...req.body,
             createdAt: new Date().toISOString()
         };
-        await db.collection('drafts').insertOne(draft);
+        data.drafts.push(draft);
+        await writeData(data);
         res.status(201).json(draft);
     } catch (error) {
         res.status(500).json({ error: 'Failed to save draft' });
@@ -103,12 +95,16 @@ app.post('/api/drafts', async (req, res) => {
 });
 
 // API for editor login
-app.post('/api/editor/login', (req, res) => {
+app.post('/api/editor/login', async (req, res) => {
     try {
         const { username, password } = req.body;
+        const VALID_EDITOR_USERNAME = 'udaytharu';
+        const VALID_EDITOR_PASSWORD = '123@321!!uday';
+
         if (!username || !password) {
             return res.status(400).json({ error: 'Username and password are required' });
         }
+
         if (username === VALID_EDITOR_USERNAME && password === VALID_EDITOR_PASSWORD) {
             const token = Buffer.from(`${username}-${Date.now()}-${Math.random().toString(36).substr(2)}`).toString('base64');
             res.json({ token, role: 'editor' });
@@ -127,14 +123,18 @@ app.post('/api/user/login', async (req, res) => {
         if (!username) {
             return res.status(400).json({ error: 'Username is required' });
         }
-        let user = await db.collection('users').findOne({ username });
+
+        const data = await readData();
+        let user = data.users.find(u => u.username === username);
+        
         if (!user) {
             user = {
                 id: Date.now().toString(),
                 username,
                 joinDate: new Date().toISOString()
             };
-            await db.collection('users').insertOne(user);
+            data.users.push(user);
+            await writeData(data);
         }
         res.json({ user });
     } catch (error) {
