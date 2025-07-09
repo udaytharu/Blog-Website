@@ -15,20 +15,56 @@
         <div class="login-header">
             <i class="fas fa-blog"></i>
             <h1>Welcome Back</h1>
-            <p>Enter your name to join our community</p>
+            <p id="form-desc">Enter your username and password to login</p>
         </div>
-        <form class="login-form" onsubmit="event.preventDefault(); login();">
+        <form id="login-form" class="login-form" onsubmit="event.preventDefault(); login();">
             <div class="input-group">
                 <i class="fas fa-user"></i>
-                <input type="text" id="username" class="input-field" placeholder="Enter your name" autocomplete="off" required>
+                <input type="text" id="login-username" class="input-field" placeholder="Enter your username" autocomplete="off" required>
+            </div>
+            <div class="input-group">
+                <i class="fas fa-lock toggle-password" onclick="togglePassword('login-password', this)"></i>
+                <input type="password" id="login-password" class="input-field" placeholder="Enter your password" autocomplete="off" required>
             </div>
             <button type="submit" class="login-btn">
-                <span>Join Now</span>
+                <span>Login</span>
                 <i class="fas fa-arrow-right"></i>
             </button>
-            <div id="errorMsg" class="error">
+            <div id="login-errorMsg" class="error">
                 <i class="fas fa-exclamation-circle"></i>
-                <span>Please enter your name</span>
+                <span>Please enter your username and password</span>
+            </div>
+            <div class="form-link">
+                <p>New user?<a href="#" onclick="showRegisterForm(); return false;"> Register here</a></p>
+            </div>
+        </form>
+        <form id="register-form" class="login-form" style="display:none;" onsubmit="event.preventDefault(); register();">
+            <div class="input-group">
+                <i class="fas fa-user"></i>
+                <input type="text" id="register-username" class="input-field" placeholder="Enter your username" autocomplete="off" required>
+            </div>
+            <div class="input-group">
+                <i class="fas fa-envelope"></i>
+                <input type="email" id="register-email" class="input-field" placeholder="Enter your email" autocomplete="off" required>
+            </div>
+            <div class="input-group">
+                <i class="fas fa-lock toggle-password" onclick="togglePassword('register-password', this)"></i>
+                <input type="password" id="register-password" class="input-field" placeholder="Enter your password" autocomplete="off" required>
+            </div>
+            <div class="input-group">
+                <i class="fas fa-lock toggle-password" onclick="togglePassword('register-confirm-password', this)"></i>
+                <input type="password" id="register-confirm-password" class="input-field" placeholder="Confirm your password" autocomplete="off" required>
+            </div>
+            <button type="submit" class="login-btn">
+                <span>Register</span>
+                <i class="fas fa-arrow-right"></i>
+            </button>
+            <div id="register-errorMsg" class="error">
+                <i class="fas fa-exclamation-circle"></i>
+                <span>Please enter your username, email, and password</span>
+            </div>
+            <div class="form-link">
+                <p>Already have an account?<a href="#" onclick="showLoginForm(); return false;"> Login here</a></p>
             </div>
         </form>
         <div class="login-footer">
@@ -36,5 +72,30 @@
         </div>
     </div>
     <script src="userlog.js"></script>
+    <script>
+        function showLoginForm() {
+            document.getElementById('login-form').style.display = '';
+            document.getElementById('register-form').style.display = 'none';
+            document.getElementById('form-desc').textContent = 'Enter your username and password to login';
+        }
+        function showRegisterForm() {
+            document.getElementById('login-form').style.display = 'none';
+            document.getElementById('register-form').style.display = '';
+            document.getElementById('form-desc').textContent = 'Fill the form to register as a new user';
+        }
+        function togglePassword(inputId, el) {
+            const input = document.getElementById(inputId);
+            const icon = el.querySelector('i') || el;
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.remove('fa-lock');
+                icon.classList.add('fa-lock-open');
+            } else {
+                input.type = 'password';
+                icon.classList.remove('fa-lock-open');
+                icon.classList.add('fa-lock');
+            }
+        }
+    </script>
 </body>
 </html>

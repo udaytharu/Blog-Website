@@ -61,53 +61,121 @@ function validateUsername(username) {
     return true;
 }
 
-// Handle login
+// Update login to use backend
 async function login() {
-    const username = usernameInput.value.trim();
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errorMsg = document.getElementById('login-errorMsg');
+    errorMsg.style.display = 'none';
 
-    if (!validateUsername(username)) {
+    if (!username || !password) {
+        showLoginError('Please enter your username and password');
         return;
     }
-
     try {
-        submitButton.disabled = true;
-        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
-
-        // Simulate API call delay
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // Create user object with unique ID and additional metadata
-        const user = {
-            id: Date.now().toString(),
-            username: username,
-            joinDate: new Date().toISOString(),
-            lastLogin: new Date().toISOString(),
-            preferences: {
-                theme: 'light',
-                notifications: true
-            }
-        };
-
-        // Store user data in localStorage
-        localStorage.setItem(USER_KEY, JSON.stringify(user));
-        
-        // Initialize posts array if it doesn't exist
-        if (!localStorage.getItem(POSTS_KEY)) {
-            localStorage.setItem(POSTS_KEY, JSON.stringify([]));
+        const btn = document.querySelector('#login-form button[type="submit"]');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
+        const res = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            showLoginError(data.error || 'Login failed.');
+        } else {
+            errorMsg.style.display = 'block';
+            errorMsg.style.color = '#28a745';
+            errorMsg.querySelector('span').textContent = 'Login successful! Redirecting...';
+            setTimeout(() => {
+                window.location.href = 'user_page/user.html';
+            }, 1000);
         }
-
-        // Show success message before redirect
-        showError('Login successful! Redirecting...');
-        setTimeout(() => {
-            window.location.href = 'user_page/user.html';
-        }, 1000);
-    } catch (error) {
-        showError('An error occurred. Please try again.');
-        console.error('Login error:', error);
+    } catch (err) {
+        showLoginError('Network error. Please try again.');
     } finally {
-        submitButton.disabled = false;
-        submitButton.innerHTML = 'Login';
+        const btn = document.querySelector('#login-form button[type="submit"]');
+        btn.disabled = false;
+        btn.innerHTML = '<span>Login</span> <i class="fas fa-arrow-right"></i>';
     }
+}
+
+function showLoginError(message) {
+    const errorMsg = document.getElementById('login-errorMsg');
+    errorMsg.style.display = 'block';
+    errorMsg.style.color = '#dc3545';
+    errorMsg.querySelector('span').textContent = message;
+}
+
+// Registration handler
+async function register() {
+    const username = document.getElementById('register-username').value.trim();
+    const email = document.getElementById('register-email').value.trim();
+    const password = document.getElementById('register-password').value;
+    const confirmPassword = document.getElementById('register-confirm-password').value;
+    const errorMsg = document.getElementById('register-errorMsg');
+
+    // Hide error initially
+    errorMsg.style.display = 'none';
+
+    if (!username || !email || !password || !confirmPassword) {
+        showRegisterError('All fields are required.');
+        return;
+    }
+    if (!validateEmail(email)) {
+        showRegisterError('Please enter a valid email address.');
+        return;
+    }
+    if (password !== confirmPassword) {
+        showRegisterError('Passwords do not match.');
+        return;
+    }
+    if (password.length < 6) {
+        showRegisterError('Password must be at least 6 characters.');
+        return;
+    }
+    try {
+        const btn = document.querySelector('#register-form button[type="submit"]');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Registering...';
+        const res = await fetch('/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, email, password })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            showRegisterError(data.error || 'Registration failed.');
+        } else {
+            errorMsg.style.display = 'block';
+            errorMsg.style.color = '#28a745';
+            errorMsg.querySelector('span').textContent = 'Registration successful! You can now log in.';
+            setTimeout(() => {
+                showLoginForm();
+                errorMsg.style.display = 'none';
+                errorMsg.style.color = '';
+            }, 1500);
+        }
+    } catch (err) {
+        showRegisterError('Network error. Please try again.');
+    } finally {
+        const btn = document.querySelector('#register-form button[type="submit"]');
+        btn.disabled = false;
+        btn.innerHTML = '<span>Register</span> <i class="fas fa-arrow-right"></i>';
+    }
+}
+
+function showRegisterError(message) {
+    const errorMsg = document.getElementById('register-errorMsg');
+    errorMsg.style.display = 'block';
+    errorMsg.style.color = '#dc3545';
+    errorMsg.querySelector('span').textContent = message;
+}
+
+function validateEmail(email) {
+    // Simple email validation regex
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 // Event Listeners
@@ -160,3 +228,16 @@ window.addEventListener('load', () => {
     usernameInput.focus();
 });
 localStorage.removeItem('username');
+
+function togglePassword(inputId, el) {
+    const input = document.getElementById(inputId);
+    if (input.type === 'password') {
+        input.type = 'text';
+        el.classList.remove('fa-lock');
+        el.classList.add('fa-lock-open');
+    } else {
+        input.type = 'password';
+        el.classList.remove('fa-lock-open');
+        el.classList.add('fa-lock');
+    }
+}

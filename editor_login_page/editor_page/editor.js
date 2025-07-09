@@ -3,6 +3,7 @@ const TOKEN_KEY = 'editor_token';
 const ROLE_KEY = 'editor_role';
 const POSTS_KEY = 'posts';
 const DRAFTS_KEY = 'drafts';
+const MEDIA_LIBRARY_KEY = 'MEDIA_LIBRARY_IMAGES';
 
 // DOM Elements
 const form = document.getElementById('postForm');
@@ -33,6 +34,10 @@ const editorNameDisplay = document.getElementById('editorName');
 let currentPhotos = [];
 let currentSection = 'dashboard';
 let profilePicture = localStorage.getItem('editor_profile_picture') || 'https://via.placeholder.com/50';
+
+// Add global state for sort and filter
+let sortBy = 'newest';
+let filterBy = 'all';
 
 // Authentication Check
 function checkAuth() {
@@ -126,8 +131,12 @@ function formatText(command) {
 }
 
 function insertLink() {
-    const url = prompt('Enter the URL:');
+    let url = prompt('Enter the URL:');
     if (url) {
+        url = url.trim();
+        if (!/^https?:\/\//i.test(url)) {
+            url = 'https://' + url;
+        }
         document.execCommand('createLink', false, url);
         descriptionInput.focus();
     }
@@ -135,6 +144,26 @@ function insertLink() {
 
 function triggerPhotoUpload() {
     photoInput.click();
+}
+
+// Add this function to insert an image at the cursor position in the post content
+function insertImageAtCursor(imageSrc) {
+    document.execCommand('insertImage', false, imageSrc);
+    descriptionInput.focus();
+}
+
+// Add this function to show a modal or prompt to pick an image from currentPhotos
+function showInsertImageDialog() {
+    if (!currentPhotos.length) {
+        showToast('No images uploaded for this post', 'error');
+        return;
+    }
+    // Simple prompt for now; can be replaced with a modal/gallery
+    const imgList = currentPhotos.map((img, i) => `Image ${i+1}`).join(', ');
+    const idx = prompt(`Enter image number to insert (1-${currentPhotos.length}):\n${imgList}`);
+    const num = parseInt(idx);
+    if (!num || num < 1 || num > currentPhotos.length) return;
+    insertImageAtCursor(currentPhotos[num-1]);
 }
 
 // Update Sidebar Profile
@@ -159,33 +188,40 @@ function updateSidebarProfile() {
 }
 
 // Dashboard Functions
-function loadDashboard() {
-    const posts = getLocalStorageItem(POSTS_KEY);
-    const drafts = getLocalStorageItem(DRAFTS_KEY);
+async function loadDashboard() {
+    // Fetch posts and drafts from backend
+    let posts = [];
+    let drafts = [];
+    try {
+        posts = await fetchAllPosts();
+        drafts = await fetchAllDrafts();
+    } catch (error) {
+        showToast('Failed to load dashboard data', 'error');
+    }
     const range = timeRangeSelect.value;
 
     let filteredPosts = posts;
     const now = new Date();
     switch(range) {
         case 'today':
-            filteredPosts = posts.filter(p => new Date(p.date).toDateString() === now.toDateString());
+            filteredPosts = posts.filter(p => new Date(p.createdAt).toDateString() === now.toDateString());
             break;
         case 'week':
             const weekAgo = new Date(now);
             weekAgo.setDate(now.getDate() - 7);
-            filteredPosts = posts.filter(p => new Date(p.date) >= weekAgo);
+            filteredPosts = posts.filter(p => new Date(p.createdAt) >= weekAgo);
             break;
         case 'month':
             const monthAgo = new Date(now);
             monthAgo.setMonth(now.getMonth() - 1);
-            filteredPosts = posts.filter(p => new Date(p.date) >= monthAgo);
+            filteredPosts = posts.filter(p => new Date(p.createdAt) >= monthAgo);
             break;
     }
 
     document.getElementById('totalPosts').textContent = filteredPosts.length;
     document.getElementById('totalViews').textContent = filteredPosts.reduce((sum, post) => sum + (post.views || 0), 0);
-    document.getElementById('totalComments').textContent = filteredPosts.reduce((sum, post) => sum + (post.comments?.length || 0), 0);
-    document.getElementById('totalLikes').textContent = filteredPosts.reduce((sum, post) => sum + (post.likes?.length || 0), 0);
+    document.getElementById('totalComments').textContent = filteredPosts.reduce((sum, post) => sum + ((post.comments && post.comments.length) || 0), 0);
+    document.getElementById('totalLikes').textContent = filteredPosts.reduce((sum, post) => sum + ((post.likes && post.likes.length) || 0), 0);
     draftCountBadge.textContent = drafts.length;
     postCountBadge.textContent = posts.length;
 
@@ -365,115 +401,192 @@ function updateActivityTrendChart() {
 }
 
 // Posts Functions
-function displayPosts(searchTerm = '') {
-    const posts = getLocalStorageItem(POSTS_KEY);
-    const filteredPosts = posts.filter(post => 
-        post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        post.description.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+async function fetchAllPosts() {
+    const response = await fetch('/api/posts/all');
+    if (!response.ok) throw new Error('Failed to fetch posts');
+    return await response.json();
+}
 
-    postsList.innerHTML = filteredPosts.length === 0 ? '<tr><td colspan="5">No posts found</td></tr>' : filteredPosts.map((post, index) => `
+async function fetchAllDrafts() {
+    const response = await fetch('/api/drafts');
+    if (!response.ok) throw new Error('Failed to fetch drafts');
+    return await response.json();
+}
+
+async function saveToDatabase(post, isDraft, editId = null) {
+    const url = isDraft
+        ? (editId ? `/api/drafts/${editId}` : '/api/drafts')
+        : (editId ? `/api/posts/${editId}` : '/api/posts');
+    const method = editId ? 'PUT' : 'POST';
+    const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(post)
+    });
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || 'Failed to save to database');
+    }
+    return await response.json();
+}
+
+async function deleteFromDatabase(id, isDraft) {
+    const url = isDraft ? `/api/drafts/${id}` : `/api/posts/${id}`;
+    const response = await fetch(url, { method: 'DELETE' });
+    if (!response.ok) throw new Error('Failed to delete');
+    return await response.json();
+}
+
+// Add event listeners for sort and filter dropdowns after DOMContentLoaded
+window.addEventListener('DOMContentLoaded', () => {
+    const sortSelect = document.getElementById('sortBy');
+    const filterSelect = document.getElementById('filterBy');
+    if (sortSelect) {
+        sortSelect.addEventListener('change', (e) => {
+            sortBy = e.target.value;
+            displayPosts(searchInput.value);
+        });
+    }
+    if (filterSelect) {
+        filterSelect.addEventListener('change', (e) => {
+            filterBy = e.target.value;
+            displayPosts(searchInput.value);
+        });
+    }
+});
+
+// Update displayPosts to use sort and filter
+async function displayPosts(searchTerm = '') {
+    let posts = [];
+    try {
+        posts = await fetchAllPosts();
+    } catch (error) {
+        showToast('Failed to load posts from server', 'error');
+        return;
+    }
+    // Filter
+    let filteredPosts = posts.filter(post =>
+        post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (post.content || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    if (filterBy === 'published') {
+        filteredPosts = filteredPosts.filter(post => post.status === 'published' || post.published);
+    } else if (filterBy === 'draft') {
+        filteredPosts = filteredPosts.filter(post => post.status === 'draft' || post.published === false);
+    }
+    // Sort
+    if (sortBy === 'newest') {
+        filteredPosts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    } else if (sortBy === 'oldest') {
+        filteredPosts.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    } else if (sortBy === 'mostViewed') {
+        filteredPosts.sort((a, b) => (b.views || 0) - (a.views || 0));
+    }
+    postsList.innerHTML = filteredPosts.length === 0 ? '<tr><td colspan="5">No posts found</td></tr>' : filteredPosts.map((post) => `
         <tr>
             <td>${post.title}</td>
-            <td>${post.status}</td>
-            <td>${new Date(post.date).toLocaleDateString()}</td>
+            <td>${post.status || (post.published ? 'published' : 'draft')}</td>
+            <td>${post.createdAt ? new Date(post.createdAt).toLocaleDateString() : ''}</td>
             <td>${post.views || 0}</td>
             <td>
-                <button class="btn btn-primary" onclick="editPost(${index})"><i class="fas fa-edit"></i></button>
-                <button class="btn btn-secondary" onclick="deletePost(${index})"><i class="fas fa-trash"></i></button>
+                <button class="btn btn-primary" onclick="editPost('${post._id}', false)"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-secondary" onclick="deletePost('${post._id}')"><i class="fas fa-trash"></i></button>
             </td>
         </tr>
     `).join('');
 }
 
-// Edit Post
-function editPost(index) {
-    const posts = getLocalStorageItem(POSTS_KEY);
-    const post = posts[index];
-    
-    titleInput.value = post.title;
-    descriptionInput.value = post.description;
-    postStatusSelect.value = post.status;
-    editIndexInput.value = index;
-    editIndexInput.dataset.source = 'posts';
-    currentPhotos = [...(post.photos || [])];
-    
-    showSection('new-post');
-    previewPhotos(currentPhotos);
-    cancelBtn.style.display = 'inline-block';
+async function editPost(id, isDraft) {
+    try {
+        const url = isDraft ? `/api/drafts/${id}` : `/api/posts/${id}`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Failed to fetch item');
+        const item = await response.json();
+        titleInput.value = item.title;
+        descriptionInput.innerHTML = item.content; // Use innerHTML to preserve formatting
+        editIndexInput.value = id;
+        postStatusSelect.value = isDraft ? 'draft' : 'published';
+        formTitle.textContent = isDraft ? 'Edit Draft' : 'Edit Post';
+        cancelBtn.style.display = 'inline-block';
+        showSection('new-post');
+        updateActionButtons(); // Ensure correct buttons are shown
+    } catch (error) {
+        showToast('Failed to load item for editing', 'error');
+    }
 }
 
-// Delete Post
-function deletePost(index) {
+async function deletePost(id) {
     if (confirm('Are you sure you want to delete this post?')) {
-        const posts = getLocalStorageItem(POSTS_KEY);
-        posts.splice(index, 1);
-        if (setLocalStorageItem(POSTS_KEY, posts)) {
+        try {
+            await deleteFromDatabase(id, false);
             showToast('Post deleted successfully');
             displayPosts(searchInput.value);
             loadDashboard();
+        } catch (error) {
+            showToast('Failed to delete post', 'error');
         }
     }
 }
 
 // Drafts Functions
-function displayDrafts(searchTerm = '') {
-    const drafts = getLocalStorageItem(DRAFTS_KEY);
+async function displayDrafts(searchTerm = '') {
+    let drafts = [];
+    try {
+        drafts = await fetchAllDrafts();
+    } catch (error) {
+        showToast('Failed to load drafts from server', 'error');
+        return;
+    }
     const filteredDrafts = drafts.filter(draft => 
         (draft.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (draft.description || '').toLowerCase().includes(searchTerm.toLowerCase())
+        (draft.content || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    draftsList.innerHTML = filteredDrafts.length === 0 ? '<tr><td colspan="5">No drafts found</td></tr>' : filteredDrafts.map((draft, index) => `
+    draftsList.innerHTML = filteredDrafts.length === 0 ? '<tr><td colspan="5">No drafts found</td></tr>' : filteredDrafts.map((draft) => `
         <tr>
             <td>${draft.title || 'Untitled'}</td>
             <td>${draft.status || 'draft'}</td>
-            <td>${draft.date ? new Date(draft.date).toLocaleDateString() : new Date().toLocaleDateString()}</td>
+            <td>${draft.createdAt ? new Date(draft.createdAt).toLocaleDateString() : ''}</td>
             <td>${draft.views || 0}</td>
             <td>
-                <button class="btn btn-primary" onclick="editDraft(${index})"><i class="fas fa-edit"></i></button>
-                <button class="btn btn-secondary" onclick="deleteDraft(${index})"><i class="fas fa-trash"></i></button>
+                <button class="btn btn-primary" onclick="editDraft('${draft._id}')"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-secondary" onclick="deleteDraft('${draft._id}')"><i class="fas fa-trash"></i></button>
             </td>
         </tr>
     `).join('');
 }
 
-// Edit Draft
-function editDraft(index) {
-    const drafts = getLocalStorageItem(DRAFTS_KEY);
-    const draft = drafts[index];
-    
-    if (!draft) {
-        showToast('Draft not found', 'error');
-        return;
+async function editDraft(id) {
+    try {
+        const url = `/api/drafts/${id}`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Failed to fetch draft');
+        const draft = await response.json();
+        titleInput.value = draft.title || '';
+        descriptionInput.innerHTML = draft.content || ''; // Use innerHTML to preserve formatting
+        postStatusSelect.value = draft.status || 'draft';
+        editIndexInput.value = id;
+        editIndexInput.dataset.source = 'drafts';
+        currentPhotos = [...(draft.photos || [])];
+        showSection('new-post');
+        previewPhotos(currentPhotos);
+        formTitle.textContent = 'Edit Draft';
+        cancelBtn.style.display = 'inline-block';
+        updateActionButtons(); // Ensure correct buttons are shown
+    } catch (error) {
+        showToast('Failed to load draft for editing', 'error');
     }
-
-    titleInput.value = draft.title || '';
-    descriptionInput.value = draft.description || '';
-    postStatusSelect.value = draft.status || 'draft';
-    editIndexInput.value = index;
-    editIndexInput.dataset.source = 'drafts';
-    currentPhotos = [...(draft.photos || [])];
-    
-    showSection('new-post');
-    previewPhotos(currentPhotos);
-    cancelBtn.style.display = 'inline-block';
 }
 
-// Delete Draft
-function deleteDraft(index) {
+async function deleteDraft(id) {
     if (confirm('Are you sure you want to delete this draft?')) {
-        const drafts = getLocalStorageItem(DRAFTS_KEY);
-        if (index < 0 || index >= drafts.length) {
-            showToast('Invalid draft index', 'error');
-            return;
-        }
-        
-        drafts.splice(index, 1);
-        if (setLocalStorageItem(DRAFTS_KEY, drafts)) {
+        try {
+            await deleteFromDatabase(id, true);
             showToast('Draft deleted successfully');
             displayDrafts();
             loadDashboard();
+        } catch (error) {
+            showToast('Failed to delete draft', 'error');
         }
     }
 }
@@ -481,81 +594,34 @@ function deleteDraft(index) {
 // Save Post
 async function savePost(e) {
     e.preventDefault();
-    
-    if (!titleInput.value.trim() || !descriptionInput.value.trim()) {
+    const title = titleInput.value.trim();
+    const content = descriptionInput.innerHTML.trim();
+    if (!title || !content) {
         showToast('Please fill in all required fields', 'error');
         return;
     }
-
+    const isDraft = postStatusSelect.value === 'draft';
+    const editId = editIndexInput.value !== '-1' ? editIndexInput.value : null;
     const post = {
-        id: editIndexInput.value === '-1' ? Date.now().toString() : undefined,
-        title: titleInput.value.trim(),
-        description: descriptionInput.value.trim(),
-        date: new Date().toISOString(),
-        lastModified: new Date().toISOString(),
-        photos: [...currentPhotos],
-        status: postStatusSelect.value,
-        author: localStorage.getItem('editor_name') || 'Editor Name', // Set author
+        title: title,
+        content: content,
+        author: localStorage.getItem('editor_name') || 'Editor Name',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        published: !isDraft,
+        status: isDraft ? 'draft' : 'published',
+        tags: [],
         views: 0,
-        likes: [],
-        comments: []
+        photos: currentPhotos // Add this line to include images
     };
-
-    const editIndex = parseInt(editIndexInput.value);
-    const isDraft = post.status === 'draft';
-    const storageKey = isDraft ? DRAFTS_KEY : POSTS_KEY;
-    const source = editIndexInput.dataset.source;
-    let items = getLocalStorageItem(storageKey);
-
-    if (editIndex === -1) {
-        post.id = Date.now().toString();
-        items.push(post);
-        if (setLocalStorageItem(storageKey, items)) {
-            showToast('Post created successfully');
+    try {
+        await saveToDatabase(post, isDraft, editId);
+        showToast(isDraft ? 'Draft saved to database' : 'Post saved to database');
             clearForm();
             showSection(isDraft ? 'drafts' : 'posts');
             loadDashboard();
-        }
-    } else {
-        const existingItem = source === 'posts' ? getLocalStorageItem(POSTS_KEY)[editIndex] : getLocalStorageItem(DRAFTS_KEY)[editIndex];
-        post.id = existingItem.id;
-        post.views = existingItem.views || 0;
-        post.likes = existingItem.likes || [];
-        post.comments = existingItem.comments || [];
-
-        if (source === 'drafts' && !isDraft) {
-            const drafts = getLocalStorageItem(DRAFTS_KEY);
-            drafts.splice(editIndex, 1);
-            setLocalStorageItem(DRAFTS_KEY, drafts);
-            const posts = getLocalStorageItem(POSTS_KEY);
-            posts.push(post);
-            if (setLocalStorageItem(POSTS_KEY, posts)) {
-                showToast('Post published successfully');
-                clearForm();
-                showSection('posts');
-                loadDashboard();
-            }
-        } else if (source === 'posts' && isDraft) {
-            const posts = getLocalStorageItem(POSTS_KEY);
-            posts.splice(editIndex, 1);
-            setLocalStorageItem(POSTS_KEY, posts);
-            const drafts = getLocalStorageItem(DRAFTS_KEY);
-            drafts.push(post);
-            if (setLocalStorageItem(DRAFTS_KEY, drafts)) {
-                showToast('Post moved to drafts');
-                clearForm();
-                showSection('drafts');
-                loadDashboard();
-            }
-        } else {
-            items[editIndex] = post;
-            if (setLocalStorageItem(storageKey, items)) {
-                showToast('Post updated successfully');
-                clearForm();
-                showSection(isDraft ? 'drafts' : 'posts');
-                loadDashboard();
-            }
-        }
+    } catch (error) {
+        showToast(error.message || 'Failed to save to database', 'error');
     }
 }
 
@@ -568,12 +634,18 @@ function clearForm() {
     editIndexInput.dataset.source = '';
     formTitle.textContent = 'Create New Post';
     cancelBtn.style.display = 'none';
+    updateActionButtons(); // Ensure correct buttons are shown
 }
 
 // Cancel Edit
 function cancelEdit() {
     clearForm();
-    showSection('posts');
+    // Go back to drafts if editing a draft, otherwise posts
+    if (editIndexInput.dataset.source === 'drafts') {
+        showSection('drafts');
+    } else {
+        showSection('posts');
+    }
 }
 
 // Preview Photos
@@ -595,17 +667,32 @@ function removePhoto(photo) {
     previewPhotos(currentPhotos);
 }
 
+// Helper to always get an array from localStorage
+function getMediaLibraryImages() {
+    let images = getLocalStorageItem(MEDIA_LIBRARY_KEY);
+    if (!Array.isArray(images)) images = [];
+    return images;
+}
+function setMediaLibraryImages(images) {
+    setLocalStorageItem(MEDIA_LIBRARY_KEY, images);
+}
+
 // Media Library Functions
 function loadMediaLibrary(searchTerm = '') {
     const mediaGrid = document.getElementById('mediaGrid');
     const posts = getLocalStorageItem(POSTS_KEY);
     const drafts = getLocalStorageItem(DRAFTS_KEY);
-    let allImages = [...posts, ...drafts].flatMap(item => item.photos || []);
-    
+    const mediaImages = getMediaLibraryImages();
+    let allImages = [
+        ...mediaImages,
+        ...posts.flatMap(item => item.photos || []),
+        ...drafts.flatMap(item => item.photos || [])
+    ];
+    // Remove duplicates
+    allImages = Array.from(new Set(allImages));
     if (searchTerm) {
         allImages = allImages.filter((image, index) => `media ${index + 1}`.toLowerCase().includes(searchTerm.toLowerCase()));
     }
-
     mediaGrid.innerHTML = allImages.length === 0 ? '<div class="no-media">No media found</div>' : allImages.map((image, index) => `
         <div class="media-item">
             <img src="${image}" alt="Media ${index + 1}" loading="lazy">
@@ -625,11 +712,15 @@ function deleteMedia(image) {
     if (confirm('Are you sure you want to delete this media?')) {
         const posts = getLocalStorageItem(POSTS_KEY);
         const drafts = getLocalStorageItem(DRAFTS_KEY);
-        
+        let mediaImages = getMediaLibraryImages();
         posts.forEach(post => post.photos = post.photos?.filter(p => p !== image) || []);
         drafts.forEach(draft => draft.photos = draft.photos?.filter(p => p !== image) || []);
-        
-        if (setLocalStorageItem(POSTS_KEY, posts) && setLocalStorageItem(DRAFTS_KEY, drafts)) {
+        mediaImages = mediaImages.filter(p => p !== image);
+        if (
+            setLocalStorageItem(POSTS_KEY, posts) &&
+            setLocalStorageItem(DRAFTS_KEY, drafts) &&
+            setMediaLibraryImages(mediaImages)
+        ) {
             showToast('Media deleted successfully');
             loadMediaLibrary(searchMediaInput.value);
         }
@@ -660,7 +751,12 @@ function uploadMedia() {
 
         currentPhotos = [...currentPhotos, ...newPhotos];
         previewPhotos(currentPhotos);
-        showToast('Media uploaded to current post');
+        // Add to media library storage
+        let mediaImages = getMediaLibraryImages();
+        mediaImages = [...mediaImages, ...newPhotos];
+        setMediaLibraryImages(mediaImages);
+        showToast('Media uploaded to library');
+        loadMediaLibrary();
     };
     
     input.click();
@@ -819,7 +915,23 @@ function saveNotificationSettings(e) {
 }
 
 // Event Listeners
-form.addEventListener('submit', savePost);
+// Add event listeners for Save Post and Save as Draft buttons
+const savePostBtn = document.getElementById('savePostBtn');
+const saveDraftBtn = document.getElementById('saveDraftBtn');
+
+if (form) {
+    form.addEventListener('submit', function(e) {
+        // Default submit: Save Post (status from dropdown)
+        savePost(e);
+    });
+}
+if (saveDraftBtn) {
+    saveDraftBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        postStatusSelect.value = 'draft';
+        savePost(e);
+    });
+}
 photoInput.addEventListener('change', async (e) => {
     const files = Array.from(e.target.files);
     const validTypes = ['image/jpeg', 'image/png', 'image/gif'];
@@ -886,3 +998,113 @@ document.querySelectorAll('.sidebar-menu a').forEach(link => {
 checkAuth();
 updateSidebarProfile();
 showSection('dashboard');
+window.editDraft = editDraft;
+
+const publishNowBtn = document.getElementById('publishNowBtn');
+const moveToDraftBtn = document.getElementById('moveToDraftBtn');
+
+function updateActionButtons() {
+    // Show/hide publish/move buttons based on current status
+    if (postStatusSelect.value === 'draft') {
+        publishNowBtn.style.display = 'inline-block';
+        moveToDraftBtn.style.display = 'none';
+    } else if (postStatusSelect.value === 'published') {
+        publishNowBtn.style.display = 'none';
+        moveToDraftBtn.style.display = 'inline-block';
+    } else {
+        publishNowBtn.style.display = 'none';
+        moveToDraftBtn.style.display = 'none';
+    }
+}
+
+if (postStatusSelect) {
+    postStatusSelect.addEventListener('change', updateActionButtons);
+}
+
+if (publishNowBtn) {
+    publishNowBtn.addEventListener('click', async function(e) {
+        e.preventDefault();
+        const editId = editIndexInput.value !== '-1' ? editIndexInput.value : null;
+        if (editIndexInput.dataset.source === 'drafts' && editId) {
+            // Publish draft using backend endpoint
+            try {
+                const response = await fetch(`/api/drafts/${editId}/publish`, { method: 'POST' });
+                if (!response.ok) throw new Error('Failed to publish draft');
+                showToast('Draft published successfully');
+                clearForm();
+                showSection('posts');
+                loadDashboard();
+            } catch (error) {
+                showToast(error.message || 'Failed to publish draft', 'error');
+            }
+        } else {
+            // If editing a post, just update status
+            postStatusSelect.value = 'published';
+            savePost(e);
+        }
+    });
+}
+if (moveToDraftBtn) {
+    moveToDraftBtn.addEventListener('click', async function(e) {
+        e.preventDefault();
+        const editId = editIndexInput.value !== '-1' ? editIndexInput.value : null;
+        if (editIndexInput.dataset.source !== 'drafts' && editId) {
+            // Move post to drafts: create draft, then delete post
+            try {
+                const post = {
+                    title: titleInput.value.trim(),
+                    content: descriptionInput.innerHTML.trim(), // Use innerHTML for content
+                    author: localStorage.getItem('editor_name') || 'Editor Name',
+                    status: 'draft',
+                    tags: [],
+                    views: 0
+                };
+                // Create draft
+                const response = await fetch('/api/drafts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(post)
+                });
+                if (!response.ok) throw new Error('Failed to create draft');
+                // Delete post
+                await fetch(`/api/posts/${editId}`, { method: 'DELETE' });
+                showToast('Post moved to drafts');
+                clearForm();
+                showSection('drafts');
+                loadDashboard();
+            } catch (error) {
+                showToast(error.message || 'Failed to move post to drafts', 'error');
+            }
+        } else {
+            // If already a draft, just update status
+            postStatusSelect.value = 'draft';
+            savePost(e);
+        }
+    });
+}
+
+// Update buttons when editing a post or draft
+function setEditFormStatus(status) {
+    postStatusSelect.value = status;
+    updateActionButtons();
+}
+
+// Patch editPost and editDraft to call setEditFormStatus
+const originalEditPost = window.editPost;
+window.editPost = async function(id, isDraft) {
+    await originalEditPost(id, isDraft);
+    setEditFormStatus(postStatusSelect.value);
+};
+const originalEditDraft = window.editDraft;
+window.editDraft = async function(id) {
+    await originalEditDraft(id);
+    setEditFormStatus(postStatusSelect.value);
+};
+
+// Register event listeners for settings forms
+if (profileForm) {
+    profileForm.addEventListener('submit', saveProfileSettings);
+}
+if (notificationForm) {
+    notificationForm.addEventListener('submit', saveNotificationSettings);
+}

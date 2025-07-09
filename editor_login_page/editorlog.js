@@ -81,22 +81,23 @@ function enableForm() {
 togglePassword.addEventListener('click', debounce(function() {
     const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
     passwordInput.setAttribute('type', type);
-    this.querySelector('i').classList.toggle('fa-eye');
-    this.querySelector('i').classList.toggle('fa-eye-slash');
+    this.classList.toggle('fa-lock');
+    this.classList.toggle('fa-lock-open');
 }, 300));
 
 // Show error message with animation
-function showError(message) {
+function showError(message, type = 'error') {
     errorElement.textContent = message;
     errorElement.style.display = 'block';
     errorElement.classList.add('fade-in');
-    
-    // Remove fade-in class after animation
+    if (type === 'success') {
+        errorElement.style.color = '#4CAF50'; // green
+    } else {
+        errorElement.style.color = '#e74c3c'; // red
+    }
     setTimeout(() => {
         errorElement.classList.remove('fade-in');
     }, 500);
-
-    // Hide error after 3 seconds
     setTimeout(() => {
         errorElement.style.display = 'none';
     }, 3000);
@@ -168,7 +169,7 @@ form.addEventListener('submit', async (e) => {
             }
 
             // Show success message before redirect
-            showError('Login successful! Redirecting...');
+            showError('Login successful! Redirecting...', 'success');
             setTimeout(() => {
                 window.location.href = 'editor_page/editor.html';
             }, 1000);
