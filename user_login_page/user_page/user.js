@@ -93,6 +93,23 @@ window.addEventListener('DOMContentLoaded', async () => {
     loadPosts();
 });
 
+document.addEventListener('DOMContentLoaded', function() {
+  const modal = document.getElementById('imageModal');
+  const modalImg = document.getElementById('imageModalImg');
+  const modalClose = document.getElementById('imageModalClose');
+
+  document.body.addEventListener('click', function(e) {
+    if (e.target.matches('.post-images img')) {
+      modal.style.display = 'flex';
+      modalImg.src = e.target.src;
+    }
+    if (e.target === modal || e.target === modalClose) {
+      modal.style.display = 'none';
+      modalImg.src = '';
+    }
+  });
+});
+
 function setupEventListeners() {
     searchInput.addEventListener('input', (e) => {
         searchQuery = e.target.value.toLowerCase();
@@ -171,7 +188,7 @@ function displayPosts() {
                 </div>
             ` : ''}
             ${createPostContent(post, idx)}
-            <div>By ${post.author} | ${new Date(post.createdAt).toLocaleString()} | Status: ${post.status || (post.published ? 'published' : 'draft')}</div>
+            <div>Author: ${post.author} | ${new Date(post.createdAt).toLocaleString()} | Status: ${post.status || (post.published ? 'published' : 'draft')}</div>
             <div>
                 <button onclick="toggleLikePost('${post._id}'); event.stopPropagation();" class="btn btn-like${hasLiked ? ' liked' : ''}">
                     <i class="fas fa-heart"></i> <span>${likesArr.length}</span>
@@ -247,10 +264,37 @@ window.toggleLikePost = async function(postId) {
     }
 }
 
-window.toggleCommentBox = function(postId) {
+window.toggleCommentBox = async function(postId) {
     const box = document.getElementById(`comments-${postId}`);
-    if (box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
-}
+    if (!box) return;
+
+    if (box.style.display === 'none' || box.style.display === '') {
+        // Fetch comments from backend
+        try {
+            const response = await fetch(`/api/posts/${postId}`);
+            const post = await response.json();
+            const comments = post.comments || [];
+            // Get the comment form HTML
+            const form = box.querySelector('form') ? box.querySelector('form').outerHTML : '';
+            // Render form first, then comments
+            let commentsHtml = form + `
+                <div class="comments-list">
+                    ${comments.length === 0 ? '<div>No comments yet.</div>' : comments.map(comment => `
+                        <div class="comment">
+                            <strong>${comment.username || comment.author}</strong>: ${comment.text}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            box.innerHTML = commentsHtml;
+        } catch (err) {
+            box.innerHTML = '<div style="color:red;">Failed to load comments.</div>';
+        }
+        box.style.display = 'block';
+    } else {
+        box.style.display = 'none';
+    }
+};
 
 window.submitComment = async function(e, postId) {
     e.preventDefault();
@@ -388,7 +432,7 @@ function openCommentModal(index) {
     modalComments.innerHTML = post.comments.map(comment => `
         <div class="comment">
             <div class="comment-header">
-                <span class="comment-author">${comment.username}</span>
+                <span class="comment-author">${comment.username || comment.author}</span>
                 <span class="comment-date">${formatDate(comment.date)}</span>
             </div>
             <p class="comment-text">${comment.text}</p>
@@ -501,7 +545,7 @@ function createPostContent(post, idx, expanded = false) {
         return `
             <p class="post-text" id="post-text-${idx}">
                 ${post.content}
-                <span class="show-less" data-idx="${idx}" style="color: var(--primary-color); cursor: pointer;"> Hide</span>
+                <button type="button" class="show-less" data-idx="${idx}">Hide</button>
             </p>
         `;
     } else {
@@ -509,7 +553,7 @@ function createPostContent(post, idx, expanded = false) {
         return `
             <p class="post-text" id="post-text-${idx}">
                 ${displayContent}
-                ${isTruncated ? `<span class="show-more" data-idx="${idx}" style="color: var(--primary-color); cursor: pointer;"> Show more</span>` : ''}
+                ${isTruncated ? `<button type="button" class="show-more" data-idx="${idx}">Show more...</button>` : ''}
             </p>
         `;
     }
