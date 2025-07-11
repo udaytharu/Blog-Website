@@ -98,11 +98,9 @@ document.addEventListener('DOMContentLoaded', function() {
   const modalImg = document.getElementById('imageModalImg');
   const modalClose = document.getElementById('imageModalClose');
 
+  // Remove image modal logic from document.body click handler
+  // Only keep modal close logic
   document.body.addEventListener('click', function(e) {
-    if (e.target.matches('.post-images img')) {
-      modal.style.display = 'flex';
-      modalImg.src = e.target.src;
-    }
     if (e.target === modal || e.target === modalClose) {
       modal.style.display = 'none';
       modalImg.src = '';
@@ -210,10 +208,25 @@ function displayPosts() {
     // Add click event to open modal for the whole post
     postsContainer.querySelectorAll('.post').forEach(postDiv => {
         postDiv.addEventListener('click', function(e) {
-            // Prevent if clicking a button or inside a form
-            if (e.target.closest('button') || e.target.closest('form')) return;
+            // Prevent if clicking a button, form, or image
+            if (
+                e.target.closest('button') ||
+                e.target.closest('form') ||
+                e.target.matches('.post-images img')
+            ) return;
             const idx = parseInt(postDiv.getAttribute('data-index'));
             openPostModal(idx);
+        });
+    });
+
+    // Attach image modal handler directly to images
+    postsContainer.querySelectorAll('.post-images img').forEach(img => {
+        img.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const modal = document.getElementById('imageModal');
+            const modalImg = document.getElementById('imageModalImg');
+            modal.style.display = 'flex';
+            modalImg.src = img.src;
         });
     });
 
@@ -274,14 +287,24 @@ window.toggleCommentBox = async function(postId) {
             const response = await fetch(`/api/posts/${postId}`);
             const post = await response.json();
             const comments = post.comments || [];
+            const { userId } = getCurrentUser();
             // Get the comment form HTML
             const form = box.querySelector('form') ? box.querySelector('form').outerHTML : '';
             // Render form first, then comments
             let commentsHtml = form + `
                 <div class="comments-list">
                     ${comments.length === 0 ? '<div>No comments yet.</div>' : comments.map(comment => `
-                        <div class="comment">
-                            <strong>${comment.username || comment.author}</strong>: ${comment.text}
+                        <div class="comment-row" style="width: 100%; padding: 4px 0; border-bottom: 1px solid #eee;">
+                            <div style="display: flex; align-items: center;">
+                                <span class="comment-username" style="font-weight: bold; margin-right: 8px; white-space: nowrap;">${comment.username || comment.author}:</span>
+                                <span class="comment-text" style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${comment.text}</span>
+                            </div>
+                            ${comment.userId === userId ? `
+                                <div class="comment-actions" style="display: flex; gap: 8px; margin-left: 0; margin-top: 4px;">
+                                    <button onclick="editComment('${postId}', '${comment.id}')" class="btn btn-edit"><i class='fas fa-edit'></i> Edit</button>
+                                    <button onclick="deleteComment('${postId}', '${comment.id}')" class="btn btn-delete"><i class='fas fa-trash'></i> Delete</button>
+                                </div>
+                            ` : ''}
                         </div>
                     `).join('')}
                 </div>
@@ -430,16 +453,16 @@ function openCommentModal(index) {
     const { userId } = getCurrentUser();
     
     modalComments.innerHTML = post.comments.map(comment => `
-        <div class="comment">
-            <div class="comment-header">
-                <span class="comment-author">${comment.username || comment.author}</span>
-                <span class="comment-date">${formatDate(comment.date)}</span>
+        <div class="comment-row" style="width: 100%; padding: 4px 0; border-bottom: 1px solid #eee;">
+            <div style="display: flex; align-items: center;">
+                <span class="comment-username" style="font-weight: bold; margin-right: 8px; white-space: nowrap;">${comment.username || comment.author}:</span>
+                <span class="comment-text" style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${comment.text}</span>
             </div>
-            <p class="comment-text">${comment.text}</p>
             ${comment.userId === userId ? `
-                <button onclick="deleteComment(${index}, '${comment.id}')" class="btn btn-delete">
-                    <i class="fas fa-trash"></i>
-                </button>
+                <div class="comment-actions" style="display: flex; gap: 8px; margin-left: 0; margin-top: 4px;">
+                    <button onclick="editComment('${post._id}', '${comment.id}')" class="btn btn-edit"><i class='fas fa-edit'></i> Edit</button>
+                    <button onclick="deleteComment('${post._id}', '${comment.id}')" class="btn btn-delete"><i class='fas fa-trash'></i> Delete</button>
+                </div>
             ` : ''}
         </div>
     `).join('');

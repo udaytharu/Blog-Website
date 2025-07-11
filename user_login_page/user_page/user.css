@@ -933,3 +933,25 @@ input[type="text"]:focus, textarea:focus {
 .image-modal-close:hover {
   color: #6366f1;
 }
+
+.btn-edit i {
+  color: #4caf50 !important;
+  transition: color 0.2s;
+}
+.btn-edit:hover i {
+  color: #4caf50 !important;
+}
+
+.btn-delete i {
+  color: #4caf50 !important;
+  transition: color 0.2s;
+}
+.btn-delete:hover i {
+  color: #f44336 !important;
+}
+
+.btn-edit:hover,
+.btn-delete:hover {
+  background: none !important;
+  box-shadow: none !important;
+}
