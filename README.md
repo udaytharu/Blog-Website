@@ -74,7 +74,7 @@ A modern, full-featured blog platform that allows editors to create, format, and
 ## Getting Started
 1. Clone the repository
 2. Install dependencies with `npm install` (if backend is used)
-3. Open `index.html` or run the backend as needed
+3. Open `index.html` or run server.js if backend as needed by `node server.js`
 
 ---
 
