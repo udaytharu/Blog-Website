@@ -1,13 +1,14 @@
-// Get current user from localStorage
-const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+// Constants
+const API_BASE_URL = window.CONFIG ? window.CONFIG.API_BASE_URL : 'http://localhost:3000';
+const CURRENT_USER_KEY = 'currentUser';
 
 // State management
-let posts = JSON.parse(localStorage.getItem('posts')) || [];
+let posts = [];
 let currentPostIndex = -1;
 let searchQuery = '';
 let sortBy = 'newest';
 let filterBy = 'all';
-let allPosts = [];
+let currentUser = null;
 
 // DOM Elements
 const postsContainer = document.getElementById('postsContainer');
@@ -21,595 +22,852 @@ const postModal = document.getElementById('postModal');
 const modalPostContent = document.getElementById('modalPostContent');
 const noPostsMessage = document.getElementById('noPosts');
 const toast = document.getElementById('toast');
+const logoutBtn = document.getElementById('logoutBtn');
 
-// Helper to get current user from localStorage
-function getCurrentUser() {
-    return {
-        userId: localStorage.getItem('userId'),
-        username: localStorage.getItem('username')
-    };
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Check if user is logged in
+    checkAuth();
+    
+    // Get current user
+    loadCurrentUser();
+    
+    // Load posts from MongoDB
+    loadPosts();
+    
+    // Setup event listeners
+    setupEventListeners();
+    
+    // Setup modal close handlers
+    setupModals();
+});
+
+// Authentication check
+function checkAuth() {
+    const userId = localStorage.getItem('userId');
+    const username = localStorage.getItem('username');
+    
+    if (!userId || !username) {
+        // Redirect to login if not authenticated
+        window.location.href = '../userlog.html';
+    }
 }
 
-// Update currentUser variable after login/logout
-function syncCurrentUser() {
-    const { userId, username } = getCurrentUser();
+// Load current user from localStorage
+function loadCurrentUser() {
+    const userId = localStorage.getItem('userId');
+    const username = localStorage.getItem('username');
+    
     if (userId && username) {
-        window.currentUser = { id: userId, username };
-    } else {
-        window.currentUser = null;
+        currentUser = {
+            id: userId,
+            username: username
+        };
     }
-}
-
-// Call syncCurrentUser on page load
-syncCurrentUser();
-
-// Event Listeners
-async function registerUser(username, email) {
-    try {
-        const response = await fetch('/api/user/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, email })
-        });
-        const data = await response.json();
-        if (data.user && data.user._id) {
-            localStorage.setItem('userId', data.user._id);
-            localStorage.setItem('username', data.user.username);
-            syncCurrentUser();
-        }
-        return data.user;
-    } catch (error) {
-        alert('Failed to register/login user');
-        return null;
-    }
-}
-
-// Add a logout function
-function logoutUser() {
-    localStorage.removeItem('userId');
-    localStorage.removeItem('username');
-    syncCurrentUser();
-    // Optionally reload or redirect to login
-    window.location.reload();
-}
-
-// Call this on page load or login
-window.addEventListener('DOMContentLoaded', async () => {
-    let username = localStorage.getItem('username');
-    let email = localStorage.getItem('email');
-    if (!username) {
-        username = prompt('Enter your username:');
-        if (!username) return;
-        email = prompt('Enter your email (optional):') || '';
-        await registerUser(username, email);
-        localStorage.setItem('email', email);
-    }
-    // Show welcome message
+    
+    // Update welcome message if element exists
     const welcomeDiv = document.getElementById('welcomeUser');
     if (welcomeDiv && username) {
         welcomeDiv.textContent = `Welcome, ${username}!`;
     }
-    setupEventListeners();
-    loadPosts();
-});
+}
 
-document.addEventListener('DOMContentLoaded', function() {
-  const modal = document.getElementById('imageModal');
-  const modalImg = document.getElementById('imageModalImg');
-  const modalClose = document.getElementById('imageModalClose');
-
-  // Remove image modal logic from document.body click handler
-  // Only keep modal close logic
-  document.body.addEventListener('click', function(e) {
-    if (e.target === modal || e.target === modalClose) {
-      modal.style.display = 'none';
-      modalImg.src = '';
-    }
-  });
-});
-
+// Setup event listeners
 function setupEventListeners() {
-    searchInput.addEventListener('input', (e) => {
-        searchQuery = e.target.value.toLowerCase();
-        loadPosts();
-    });
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            searchQuery = e.target.value.toLowerCase();
+            displayPosts();
+        });
+    }
 
-    sortSelect.addEventListener('change', (e) => {
-        sortBy = e.target.value;
-        loadPosts();
-    });
+    if (sortSelect) {
+        sortSelect.addEventListener('change', (e) => {
+            sortBy = e.target.value;
+            displayPosts();
+        });
+    }
 
-    filterSelect.addEventListener('change', (e) => {
-        filterBy = e.target.value;
-        loadPosts();
-    });
+    if (filterSelect) {
+        filterSelect.addEventListener('change', (e) => {
+            filterBy = e.target.value;
+            displayPosts();
+        });
+    }
 
-    // Event delegation for post content and read more clicks
-    postsContainer.addEventListener('click', (e) => {
-        const postContent = e.target.closest('.post-content');
-        const readMoreLink = e.target.closest('.read-more');
-        const postCard = (postContent || readMoreLink)?.closest('.post-card');
-        if (postContent || readMoreLink) {
-            const index = Array.from(postsContainer.querySelectorAll('.post-card')).indexOf(postCard);
-            openPostModal(index);
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            logout();
+        });
+    }
+
+    // Event delegation for post interactions
+    if (postsContainer) {
+        postsContainer.addEventListener('click', handlePostClick);
+    }
+}
+
+// Handle post clicks (delegation)
+function handlePostClick(e) {
+    const postCard = e.target.closest('.post');
+    if (!postCard) return;
+    
+    const postId = postCard.dataset.id;
+    const post = posts.find(p => p._id === postId);
+    if (!post) return;
+    
+    // Handle image clicks
+    if (e.target.closest('.post-images img')) {
+        e.stopPropagation();
+        const img = e.target.closest('.post-images img');
+        openImageModal(img.src);
+        return;
+    }
+    
+    // Handle like button clicks
+    if (e.target.closest('.btn-like')) {
+        e.stopPropagation();
+        toggleLike(postId);
+        return;
+    }
+    
+    // Handle comment button clicks
+    if (e.target.closest('.btn-comment')) {
+        e.stopPropagation();
+        toggleCommentBox(postId);
+        return;
+    }
+    
+    // Handle show more/less clicks
+    if (e.target.closest('.show-more') || e.target.closest('.show-less')) {
+        e.stopPropagation();
+        const btn = e.target.closest('.show-more, .show-less');
+        const postId = btn.dataset.postId;
+        const expanded = btn.classList.contains('show-more');
+        togglePostContent(postId, expanded);
+        return;
+    }
+    
+    // Handle links inside post content
+    if (e.target.tagName === 'A') {
+        e.preventDefault();
+        const href = e.target.getAttribute('href');
+        if (href) {
+            window.open(href, '_blank');
+        }
+        return;
+    }
+    
+    // Handle edit comment clicks
+    if (e.target.closest('.btn-edit')) {
+        e.stopPropagation();
+        const btn = e.target.closest('.btn-edit');
+        const postId = btn.dataset.postId;
+        const commentId = btn.dataset.commentId;
+        editComment(postId, commentId);
+        return;
+    }
+    
+    // Handle delete comment clicks
+    if (e.target.closest('.btn-delete')) {
+        e.stopPropagation();
+        const btn = e.target.closest('.btn-delete');
+        const postId = btn.dataset.postId;
+        const commentId = btn.dataset.commentId;
+        deleteComment(postId, commentId);
+        return;
+    }
+    
+    // Open post modal for any other click on post (shows only post details)
+    openPostModal(postId);
+}
+
+// Setup modals
+function setupModals() {
+    // Image modal
+    const imageModal = document.getElementById('imageModal');
+    const imageModalClose = document.getElementById('imageModalClose');
+    
+    if (imageModalClose) {
+        imageModalClose.addEventListener('click', () => {
+            imageModal.style.display = 'none';
+        });
+    }
+    
+    // Post modal close
+    const closePostModalBtn = document.querySelector('#postModal .close-modal');
+    if (closePostModalBtn) {
+        closePostModalBtn.addEventListener('click', closePostModal);
+    }
+    
+    // Close modals when clicking outside
+    window.addEventListener('click', (e) => {
+        if (e.target === postModal) {
+            closePostModal();
+        }
+        if (e.target === imageModal) {
+            imageModal.style.display = 'none';
+        }
+    });
+    
+    // Close modals on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (postModal && postModal.style.display === 'block') {
+                closePostModal();
+            }
+            if (imageModal) {
+                imageModal.style.display = 'none';
+            }
         }
     });
 }
 
+// Load posts from MongoDB
 async function loadPosts() {
     try {
-        const response = await fetch('/api/posts');
-        allPosts = await response.json();
+        showToast('Loading posts...', 'info');
+        
+        // Fetch published posts from MongoDB
+        const response = await fetch(`${API_BASE_URL}/api/posts`);
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch posts');
+        }
+        
+        posts = await response.json();
+        
+        // Ensure posts have required fields
+        posts = posts.map(post => ({
+            ...post,
+            status: post.status || (post.published ? 'published' : 'draft'),
+            likes: post.likes || [],
+            comments: post.comments || [],
+            // Format published date
+            publishedDate: post.publishedAt || post.createdAt || post.updatedAt || new Date().toISOString()
+        }));
+        
+        displayPosts();
+        showToast('Posts loaded successfully');
     } catch (error) {
-        alert('Failed to load posts from server');
-        return;
+        console.error('Error loading posts from MongoDB:', error);
+        showToast('Failed to load posts from server', 'error');
+        
+        // Fallback to localStorage if MongoDB fails
+        try {
+            const localPosts = JSON.parse(localStorage.getItem('posts')) || [];
+            posts = localPosts.filter(post => post.status === 'published' || post.published === true);
+            displayPosts();
+            showToast('Loaded posts from local storage', 'info');
+        } catch (localError) {
+            console.error('Error loading local posts:', localError);
+        }
     }
-    displayPosts();
 }
 
+// Display posts
 function displayPosts() {
-    let posts = allPosts.slice();
-    // Apply search
+    if (!postsContainer) return;
+    
+    let filteredPosts = [...posts];
+    
+    // Apply search filter
     if (searchQuery) {
-        posts = posts.filter(post =>
-            post.title.toLowerCase().includes(searchQuery) ||
-            post.content.toLowerCase().includes(searchQuery)
+        filteredPosts = filteredPosts.filter(post =>
+            (post.title || '').toLowerCase().includes(searchQuery) ||
+            (post.content || '').toLowerCase().includes(searchQuery)
         );
     }
+    
     // Apply filter
     if (filterBy === 'liked') {
-        const { userId } = getCurrentUser();
-        posts = posts.filter(post => (post.likes || []).some(like => like.userId === userId));
+        filteredPosts = filteredPosts.filter(post => 
+            (post.likes || []).some(like => like.userId === currentUser?.id)
+        );
     } else if (filterBy === 'commented') {
-        const { userId } = getCurrentUser();
-        posts = posts.filter(post => (post.comments || []).some(comment => comment.userId === userId));
+        filteredPosts = filteredPosts.filter(post => 
+            (post.comments || []).some(comment => comment.userId === currentUser?.id)
+        );
     }
+    
     // Apply sort
     if (sortBy === 'newest') {
-        posts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        filteredPosts.sort((a, b) => new Date(b.publishedDate || 0) - new Date(a.publishedDate || 0));
     } else if (sortBy === 'oldest') {
-        posts.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        filteredPosts.sort((a, b) => new Date(a.publishedDate || 0) - new Date(b.publishedDate || 0));
     } else if (sortBy === 'mostLiked') {
-        posts.sort((a, b) => (b.likes?.length || 0) - (a.likes?.length || 0));
+        filteredPosts.sort((a, b) => (b.likes?.length || 0) - (a.likes?.length || 0));
     }
-    const postsContainer = document.getElementById('postsContainer');
-    postsContainer.innerHTML = posts.map((post, idx) => {
-        const { userId } = getCurrentUser();
-        const likesArr = Array.isArray(post.likes) ? post.likes : [];
-        const hasLiked = likesArr.some(like => like.userId === userId);
+    
+    // Show/hide no posts message
+    if (noPostsMessage) {
+        noPostsMessage.style.display = filteredPosts.length === 0 ? 'block' : 'none';
+    }
+    
+    // Render posts
+    postsContainer.innerHTML = filteredPosts.map(post => {
+        const hasLiked = (post.likes || []).some(like => like.userId === currentUser?.id);
+        const commentsCount = post.comments?.length || 0;
+        const likesCount = post.likes?.length || 0;
+        const publishedDate = post.publishedDate ? new Date(post.publishedDate).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        }) : 'Unknown date';
+        const author = post.author || 'Unknown Author';
+        
         return `
-        <div class="post" data-index="${idx}">
-            <h2>${post.title}</h2>
+        <div class="post" data-id="${post._id}">
+            <h2>${escapeHtml(post.title || 'Untitled')}</h2>
+            
             ${post.photos && post.photos.length > 0 ? `
                 <div class="post-images">
-                    ${post.photos.map(photo => `<img src="${photo}" alt="Post image" loading="lazy">`).join('')}
+                    ${post.photos.map(photo => `
+                        <img src="${photo}" alt="Post image" loading="lazy" style="cursor: pointer;">
+                    `).join('')}
                 </div>
             ` : ''}
-            ${createPostContent(post, idx)}
-            <div>Author: ${post.author} | ${new Date(post.createdAt).toLocaleString()} | Status: ${post.status || (post.published ? 'published' : 'draft')}</div>
-            <div>
-                <button onclick="toggleLikePost('${post._id}'); event.stopPropagation();" class="btn btn-like${hasLiked ? ' liked' : ''}">
-                    <i class="fas fa-heart"></i> <span>${likesArr.length}</span>
+            
+            <div class="post-content" id="post-content-${post._id}">
+                ${createPostContent(post)}
+            </div>
+            
+            <div class="post-meta">
+                <span><i class="fas fa-user"></i> ${escapeHtml(author)}</span>
+                <span><i class="fas fa-calendar"></i> ${publishedDate}</span>
+                ${post.views ? `<span><i class="fas fa-eye"></i> ${post.views} views</span>` : ''}
+            </div>
+            
+            <div class="post-actions">
+                <button onclick="event.stopPropagation(); toggleLike('${post._id}')" 
+                        class="btn btn-like ${hasLiked ? 'liked' : ''}">
+                    <i class="fas fa-heart"></i>
+                    <span>${likesCount}</span>
                 </button>
-                <button onclick="toggleCommentBox('${post._id}'); event.stopPropagation();" class="btn btn-comment">
-                    <i class="fas fa-comment"></i> <span>${post.comments ? post.comments.length : 0}</span>
+                
+                <button onclick="event.stopPropagation(); toggleCommentBox('${post._id}')" 
+                        class="btn btn-comment">
+                    <i class="fas fa-comment"></i>
+                    <span>${commentsCount}</span>
                 </button>
             </div>
-            <div id="comments-${post._id}" style="display:none;">
-                <form onsubmit="submitComment(event, '${post._id}')">
-                    <input type="text" id="comment-input-${post._id}" placeholder="Add a comment..." required />
-                    <button type="submit" class="btn btn-comment"><i class="fas fa-paper-plane"></i> Post</button>
+            
+            <div id="comments-${post._id}" class="comments-section" style="display: none;">
+                <div class="comments-list" id="comments-list-${post._id}">
+                    ${renderComments(post.comments || [], post._id)}
+                </div>
+                
+                <form onsubmit="event.preventDefault(); submitComment('${post._id}')" class="comment-form">
+                    <input type="text" id="comment-input-${post._id}" 
+                           placeholder="Write a comment..." 
+                           class="comment-input"
+                           required>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-paper-plane"></i> Post
+                    </button>
                 </form>
             </div>
         </div>
         `;
     }).join('');
-
-    // Add click event to open modal for the whole post
-    postsContainer.querySelectorAll('.post').forEach(postDiv => {
-        postDiv.addEventListener('click', function(e) {
-            // Prevent if clicking a button, form, or image
-            if (
-                e.target.closest('button') ||
-                e.target.closest('form') ||
-                e.target.matches('.post-images img')
-            ) return;
-            const idx = parseInt(postDiv.getAttribute('data-index'));
-            openPostModal(idx);
-        });
-    });
-
-    // Attach image modal handler directly to images
-    postsContainer.querySelectorAll('.post-images img').forEach(img => {
-        img.addEventListener('click', function(e) {
-            e.stopPropagation();
-            const modal = document.getElementById('imageModal');
-            const modalImg = document.getElementById('imageModalImg');
-            modal.style.display = 'flex';
-            modalImg.src = img.src;
-        });
-    });
-
-    // Add event delegation for 'Show more' links after rendering posts
-    postsContainer.querySelectorAll('.show-more').forEach(link => {
-        link.addEventListener('click', function(e) {
-            e.stopPropagation();
-            const idx = this.getAttribute('data-idx');
-            const post = posts[idx];
-            const postText = document.getElementById(`post-text-${idx}`);
-            postText.innerHTML = `${post.content}`;
-        });
-    });
-    setupShowMoreLessHandlers(posts);
 }
 
-// Always get username from localStorage for comments and likes
-function getCurrentUsername() {
-    return localStorage.getItem('username');
+// Create post content with show more/less functionality
+function createPostContent(post) {
+    const maxLength = 300;
+    // Strip HTML tags for length calculation
+    const textContent = stripHtml(post.content || '');
+    const isTruncated = textContent.length > maxLength;
+    
+    if (isTruncated) {
+        // Show truncated version with HTML stripped for length check but preserve HTML in display
+        return `
+            <div class="post-text truncated" id="post-text-${post._id}">
+                ${truncateHtml(post.content || '', maxLength)}
+                <button class="show-more" data-post-id="${post._id}">Show more</button>
+            </div>
+        `;
+    } else {
+        return `
+            <div class="post-text full" id="post-text-${post._id}">
+                ${post.content || ''}
+            </div>
+        `;
+    }
 }
 
-window.toggleLikePost = async function(postId) {
-    const { userId, username } = getCurrentUser();
-    if (!userId || !username) return alert('Please login first');
-    console.log('Liking as:', { userId, username });
+// Helper function to strip HTML tags
+function stripHtml(html) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || '';
+}
+
+// Helper function to truncate HTML while preserving tags
+function truncateHtml(html, maxLength) {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    
+    // Get text content for length check
+    const text = div.textContent || div.innerText;
+    
+    if (text.length <= maxLength) {
+        return html;
+    }
+    
+    // Truncate while trying to keep HTML structure
+    let result = '';
+    let currentLength = 0;
+    const stack = [];
+    
+    function processNode(node) {
+        if (currentLength >= maxLength) return;
+        
+        if (node.nodeType === Node.TEXT_NODE) {
+            const remaining = maxLength - currentLength;
+            const text = node.textContent;
+            if (text.length > remaining) {
+                result += text.substring(0, remaining) + '...';
+                currentLength = maxLength;
+            } else {
+                result += text;
+                currentLength += text.length;
+            }
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+            // Open tag
+            result += `<${node.tagName.toLowerCase()}`;
+            
+            // Add attributes
+            Array.from(node.attributes).forEach(attr => {
+                result += ` ${attr.name}="${attr.value}"`;
+            });
+            
+            result += '>';
+            stack.push(node.tagName.toLowerCase());
+            
+            // Process children
+            Array.from(node.childNodes).forEach(processNode);
+            
+            // Close tag if we didn't exceed maxLength
+            if (currentLength < maxLength) {
+                result += `</${stack.pop()}>`;
+            }
+        }
+    }
+    
+    Array.from(div.childNodes).forEach(processNode);
+    
+    // Close any remaining open tags
+    while (stack.length > 0 && currentLength < maxLength) {
+        result += `</${stack.pop()}>`;
+    }
+    
+    return result;
+}
+
+// Toggle post content (show more/less)
+function togglePostContent(postId, expanded) {
+    const post = posts.find(p => p._id === postId);
+    if (!post) return;
+    
+    const contentDiv = document.getElementById(`post-content-${postId}`);
+    if (!contentDiv) return;
+    
+    if (expanded) {
+        contentDiv.innerHTML = `
+            <div class="post-text full" id="post-text-${postId}">
+                ${post.content || ''}
+                <button class="show-less" data-post-id="${postId}">Show less</button>
+            </div>
+        `;
+    } else {
+        const maxLength = 300;
+        contentDiv.innerHTML = `
+            <div class="post-text truncated" id="post-text-${postId}">
+                ${truncateHtml(post.content || '', maxLength)}
+                <button class="show-more" data-post-id="${postId}">Show more</button>
+            </div>
+        `;
+    }
+}
+
+// Render comments
+function renderComments(comments, postId) {
+    if (!comments || comments.length === 0) {
+        return '<div class="no-comments">No comments yet. Be the first to comment!</div>';
+    }
+    
+    return comments.map(comment => {
+        const isOwner = comment.userId === currentUser?.id;
+        const commentDate = comment.date ? new Date(comment.date).toLocaleString() : '';
+        
+        return `
+            <div class="comment" data-comment-id="${comment.id}">
+                <div class="comment-header">
+                    <span class="comment-author">
+                        <i class="fas fa-user-circle"></i> ${escapeHtml(comment.username || comment.author || 'Anonymous')}
+                    </span>
+                    <span class="comment-date">${commentDate}</span>
+                </div>
+                <div class="comment-content">
+                    <p class="comment-text" id="comment-text-${comment.id}">${escapeHtml(comment.text)}</p>
+                    ${isOwner ? `
+                        <div class="comment-actions">
+                            <button class="btn-edit" data-post-id="${postId}" data-comment-id="${comment.id}">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
+                            <button class="btn-delete" data-post-id="${postId}" data-comment-id="${comment.id}">
+                                <i class="fas fa-trash"></i> Delete
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Toggle like
+async function toggleLike(postId) {
+    if (!currentUser) {
+        showToast('Please login to like posts', 'error');
+        return;
+    }
+    
     try {
-        const response = await fetch(`/api/posts/${postId}`);
-        const post = await response.json();
-        const hasLiked = (post.likes || []).some(like => like.userId === userId);
-        if (hasLiked) {
-            // Unlike
-            await fetch(`/api/posts/${postId}/unlike`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId })
+        const postIndex = posts.findIndex(p => p._id === postId);
+        if (postIndex === -1) return;
+        
+        const post = posts[postIndex];
+        const hasLiked = (post.likes || []).some(like => like.userId === currentUser.id);
+        
+        // Send request to server
+        const response = await fetch(`${API_BASE_URL}/api/posts/${postId}/${hasLiked ? 'unlike' : 'like'}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                userId: currentUser.id,
+                username: currentUser.username
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to update like');
+        }
+        
+        // Update local state
+        const likes = post.likes || [];
+        
+        if (!hasLiked) {
+            // Add like
+            likes.push({
+                userId: currentUser.id,
+                username: currentUser.username,
+                date: new Date().toISOString()
             });
         } else {
-            // Like
-            await fetch(`/api/posts/${postId}/like`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId, username })
-            });
+            // Remove like
+            const likeIndex = likes.findIndex(like => like.userId === currentUser.id);
+            if (likeIndex !== -1) {
+                likes.splice(likeIndex, 1);
+            }
         }
-        loadPosts();
+        
+        post.likes = likes;
+        posts[postIndex] = post;
+        
+        // Update UI
+        displayPosts();
+        
+        showToast(hasLiked ? 'Post unliked!' : 'Post liked!');
     } catch (error) {
-        alert('Failed to update like');
+        console.error('Error toggling like:', error);
+        showToast('Failed to update like', 'error');
     }
 }
 
-window.toggleCommentBox = async function(postId) {
-    const box = document.getElementById(`comments-${postId}`);
-    if (!box) return;
-
-    if (box.style.display === 'none' || box.style.display === '') {
-        // Fetch comments from backend
-        try {
-            const response = await fetch(`/api/posts/${postId}`);
-            const post = await response.json();
-            const comments = post.comments || [];
-            const { userId } = getCurrentUser();
-            // Get the comment form HTML
-            const form = box.querySelector('form') ? box.querySelector('form').outerHTML : '';
-            // Render form first, then comments
-            let commentsHtml = form + `
-                <div class="comments-list">
-                    ${comments.length === 0 ? '<div>No comments yet.</div>' : comments.map(comment => `
-                        <div class="comment-row" style="width: 100%; padding: 4px 0; border-bottom: 1px solid #eee;">
-                            <div style="display: flex; align-items: center;">
-                                <span class="comment-username" style="font-weight: bold; margin-right: 8px; white-space: nowrap;">${comment.username || comment.author}:</span>
-                                <span class="comment-text" style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${comment.text}</span>
-                            </div>
-                            ${comment.userId === userId ? `
-                                <div class="comment-actions" style="display: flex; gap: 8px; margin-left: 0; margin-top: 4px;">
-                                    <button onclick="editComment('${postId}', '${comment.id}')" class="btn btn-edit"><i class='fas fa-edit'></i> Edit</button>
-                                    <button onclick="deleteComment('${postId}', '${comment.id}')" class="btn btn-delete"><i class='fas fa-trash'></i> Delete</button>
-                                </div>
-                            ` : ''}
-                        </div>
-                    `).join('')}
-                </div>
-            `;
-            box.innerHTML = commentsHtml;
-        } catch (err) {
-            box.innerHTML = '<div style="color:red;">Failed to load comments.</div>';
-        }
-        box.style.display = 'block';
+// Toggle comment box
+function toggleCommentBox(postId) {
+    const commentsSection = document.getElementById(`comments-${postId}`);
+    if (!commentsSection) return;
+    
+    if (commentsSection.style.display === 'none' || commentsSection.style.display === '') {
+        commentsSection.style.display = 'block';
+        
+        // Scroll to comments
+        setTimeout(() => {
+            commentsSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }, 100);
     } else {
-        box.style.display = 'none';
+        commentsSection.style.display = 'none';
     }
-};
+}
 
-window.submitComment = async function(e, postId) {
-    e.preventDefault();
+// Submit comment
+async function submitComment(postId) {
+    if (!currentUser) {
+        showToast('Please login to comment', 'error');
+        return;
+    }
+    
     const input = document.getElementById(`comment-input-${postId}`);
     const text = input.value.trim();
-    const { userId, username } = getCurrentUser();
-    if (!text || !username || !userId) return;
-    console.log('Submitting comment as:', { userId, username });
+    
+    if (!text) {
+        showToast('Please enter a comment', 'error');
+        return;
+    }
+    
     try {
-        // Check if editing
-        const editingId = input.dataset.editing;
-        if (editingId) {
-            await fetch(`/api/posts/${postId}/comment/${editingId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text, userId })
-            });
-            delete input.dataset.editing;
-        } else {
-            await fetch(`/api/posts/${postId}/comment`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text, author: username, userId })
-            });
+        const postIndex = posts.findIndex(p => p._id === postId);
+        if (postIndex === -1) return;
+        
+        const post = posts[postIndex];
+        
+        // Send comment to server
+        const response = await fetch(`${API_BASE_URL}/api/posts/${postId}/comment`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                text: text,
+                author: currentUser.username,
+                userId: currentUser.id
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to add comment');
         }
+        
+        const data = await response.json();
+        
+        // Update local state with the comment from server
+        const comments = post.comments || [];
+        comments.push(data.comment);
+        post.comments = comments;
+        posts[postIndex] = post;
+        
+        // Clear input
         input.value = '';
-        loadPosts();
+        
+        // Update UI
+        const commentsList = document.getElementById(`comments-list-${postId}`);
+        if (commentsList) {
+            commentsList.innerHTML = renderComments(comments, postId);
+        }
+        
+        // Update comment count in post actions
+        const commentBtn = document.querySelector(`.post[data-id="${postId}"] .btn-comment span`);
+        if (commentBtn) {
+            commentBtn.textContent = comments.length;
+        }
+        
+        showToast('Comment added!');
     } catch (error) {
-        alert('Failed to comment');
+        console.error('Error submitting comment:', error);
+        showToast('Failed to add comment', 'error');
     }
 }
 
-window.editComment = async function(postId, commentId) {
+// Edit comment
+async function editComment(postId, commentId) {
     const input = document.getElementById(`comment-input-${postId}`);
+    if (!input) return;
+    
+    const post = posts.find(p => p._id === postId);
+    if (!post) return;
+    
+    const comment = (post.comments || []).find(c => c.id === commentId);
+    if (!comment) return;
+    
+    input.value = comment.text;
+    input.dataset.editing = commentId;
+    input.focus();
+    
+    // Open comments section if closed
+    const commentsSection = document.getElementById(`comments-${postId}`);
+    if (commentsSection && commentsSection.style.display === 'none') {
+        commentsSection.style.display = 'block';
+    }
+}
+
+// Delete comment
+async function deleteComment(postId, commentId) {
+    if (!confirm('Are you sure you want to delete this comment?')) return;
+    
     try {
-        const response = await fetch(`/api/posts/${postId}`);
-        const post = await response.json();
-        const comment = (post.comments || []).find(c => c.id === commentId);
-        if (comment) {
-            input.value = comment.text;
-            input.focus();
-            input.dataset.editing = commentId;
+        const postIndex = posts.findIndex(p => p._id === postId);
+        if (postIndex === -1) return;
+        
+        const post = posts[postIndex];
+        
+        // Send delete request to server
+        const response = await fetch(`${API_BASE_URL}/api/posts/${postId}/comment/${commentId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                userId: currentUser.id
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to delete comment');
+        }
+        
+        // Update local state
+        const comments = post.comments || [];
+        const commentIndex = comments.findIndex(c => c.id === commentId);
+        
+        if (commentIndex !== -1) {
+            comments.splice(commentIndex, 1);
+            post.comments = comments;
+            posts[postIndex] = post;
+            
+            // Update UI
+            const commentsList = document.getElementById(`comments-list-${postId}`);
+            if (commentsList) {
+                commentsList.innerHTML = renderComments(comments, postId);
+            }
+            
+            // Update comment count
+            const commentBtn = document.querySelector(`.post[data-id="${postId}"] .btn-comment span`);
+            if (commentBtn) {
+                commentBtn.textContent = comments.length;
+            }
+            
+            showToast('Comment deleted!');
         }
     } catch (error) {
-        alert('Failed to fetch comment for editing');
+        console.error('Error deleting comment:', error);
+        showToast('Failed to delete comment', 'error');
     }
 }
 
-window.deleteComment = async function(postId, commentId) {
-    if (!confirm('Are you sure you want to delete this comment?')) return;
-    const { userId } = getCurrentUser();
+// Open post modal - SHOWS ONLY POST DETAILS (NO LIKE/COMMENT BUTTONS)
+async function openPostModal(postId) {
+    const post = posts.find(p => p._id === postId);
+    if (!post || !postModal) return;
+    
+    currentPostIndex = posts.indexOf(post);
+    
+    // Increment view count
     try {
-        await fetch(`/api/posts/${postId}/comment/${commentId}`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId })
-        });
-        loadPosts();
+        await fetch(`${API_BASE_URL}/api/posts/${postId}`);
+        // Update local view count
+        post.views = (post.views || 0) + 1;
     } catch (error) {
-        alert('Failed to delete comment');
+        console.error('Error incrementing views:', error);
     }
-}
-
-function toggleLike(index) {
-    const post = posts[index];
-    const { userId, username } = getCurrentUser();
-    const likeIndex = post.likes.findIndex(like => like.userId === userId);
-
-    if (likeIndex === -1) {
-        post.likes.push({
-            userId,
-            username,
-            date: new Date().toISOString()
-        });
-    } else {
-        post.likes.splice(likeIndex, 1);
-    }
-
-    localStorage.setItem('posts', JSON.stringify(posts));
-    loadPosts();
-    if (postModal.style.display === 'block' && currentPostIndex === index) {
-        openPostModal(index);
-    }
-    showToast('Like status updated');
-}
-
-function openPostModal(index) {
-    currentPostIndex = index;
-    const post = posts[index];
-    const { userId } = getCurrentUser();
-
+    
+    const publishedDate = post.publishedDate ? new Date(post.publishedDate).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    }) : 'Unknown date';
+    
+    // MODAL WITH ONLY POST DETAILS - NO LIKE/COMMENT BUTTONS
     modalPostContent.innerHTML = `
-        <div class="post-header">
-            <h2>${post.title}</h2>
+        <div class="post-modal-content">
+            <h2>${escapeHtml(post.title || 'Untitled')}</h2>
+            
             <div class="post-meta">
-                <span><i class="fas fa-user"></i> ${post.author || 'Unknown Author'}</span>
-                <span><i class="fas fa-calendar"></i> ${formatDate(post.date)}</span>
+                <span><i class="fas fa-user"></i> ${escapeHtml(post.author || 'Unknown Author')}</span>
+                <span><i class="fas fa-calendar"></i> ${publishedDate}</span>
+                ${post.views ? `<span><i class="fas fa-eye"></i> ${post.views} views</span>` : ''}
             </div>
-        </div>
-        <div class="post-content">
-            <p>${post.description}</p>
+            
             ${post.photos && post.photos.length > 0 ? `
                 <div class="post-images">
                     ${post.photos.map(photo => `
-                        <img src="${photo}" alt="Post image" loading="lazy">
+                        <img src="${photo}" alt="Post image" style="cursor: pointer; max-width: 100%; margin: 10px 0;" 
+                             onclick="openImageModal('${photo}')">
                     `).join('')}
                 </div>
             ` : ''}
-        </div>
-        <div class="post-actions">
-            <button onclick="toggleLike(${index})" class="btn btn-like ${post.likes.some(like => like.userId === userId) ? 'liked' : ''}">
-                <i class="fas fa-heart"></i>
-                <span>${post.likes.length}</span>
-            </button>
-            <button onclick="openCommentModal(${index}); closePostModal();" class="btn btn-comment">
-                <i class="fas fa-comment"></i>
-                <span>${post.comments.length}</span>
-            </button>
+            
+            <div class="post-full-content">
+                ${post.content || ''}
+            </div>
+            
+            <!-- NO LIKE OR COMMENT BUTTONS IN MODAL - ONLY POST DETAILS -->
         </div>
     `;
     
     postModal.style.display = 'block';
 }
 
+// Close post modal
 function closePostModal() {
-    postModal.style.display = 'none';
+    if (postModal) {
+        postModal.style.display = 'none';
+    }
     currentPostIndex = -1;
 }
 
-function openCommentModal(index) {
-    currentPostIndex = index;
-    const post = posts[index];
-    const { userId } = getCurrentUser();
+// Open image modal
+function openImageModal(src) {
+    const imageModal = document.getElementById('imageModal');
+    const imageModalImg = document.getElementById('imageModalImg');
     
-    modalComments.innerHTML = post.comments.map(comment => `
-        <div class="comment-row" style="width: 100%; padding: 4px 0; border-bottom: 1px solid #eee;">
-            <div style="display: flex; align-items: center;">
-                <span class="comment-username" style="font-weight: bold; margin-right: 8px; white-space: nowrap;">${comment.username || comment.author}:</span>
-                <span class="comment-text" style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${comment.text}</span>
-            </div>
-            ${comment.userId === userId ? `
-                <div class="comment-actions" style="display: flex; gap: 8px; margin-left: 0; margin-top: 4px;">
-                    <button onclick="editComment('${post._id}', '${comment.id}')" class="btn btn-edit"><i class='fas fa-edit'></i> Edit</button>
-                    <button onclick="deleteComment('${post._id}', '${comment.id}')" class="btn btn-delete"><i class='fas fa-trash'></i> Delete</button>
-                </div>
-            ` : ''}
-        </div>
-    `).join('');
-    
-    commentModal.style.display = 'block';
-}
-
-function closeCommentModal() {
-    commentModal.style.display = 'none';
-    currentPostIndex = -1;
-}
-
-function submitModalComment() {
-    if (currentPostIndex === -1) return;
-
-    const commentText = modalCommentInput.value.trim();
-    if (!commentText) {
-        showToast('Please enter a comment');
-        return;
-    }
-
-    const post = posts[currentPostIndex];
-    const { userId, username } = getCurrentUser();
-    post.comments.push({
-        id: Date.now().toString(),
-        userId,
-        username,
-        text: commentText,
-        date: new Date().toISOString()
-    });
-
-    localStorage.setItem('posts', JSON.stringify(posts));
-    modalCommentInput.value = '';
-    openCommentModal(currentPostIndex);
-    showToast('Comment added successfully');
-}
-
-function deleteComment(postIndex, commentId) {
-    const post = posts[postIndex];
-    const { userId } = getCurrentUser();
-    const commentIndex = post.comments.findIndex(comment => comment.id === commentId);
-
-    if (commentIndex !== -1 && post.comments[commentIndex].userId === userId) {
-        post.comments.splice(commentIndex, 1);
-        localStorage.setItem('posts', JSON.stringify(posts));
-        openCommentModal(postIndex);
-        showToast('Comment deleted successfully');
+    if (imageModal && imageModalImg) {
+        imageModalImg.src = src;
+        imageModal.style.display = 'flex';
     }
 }
 
-// Utility functions
-function formatDate(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
+// Logout function
+function logout() {
+    localStorage.removeItem('userId');
+    localStorage.removeItem('username');
+    localStorage.removeItem('currentUser');
+    window.location.href = '../userlog.html';
 }
 
-function truncateText(text, maxLength) {
-    if (text.length <= maxLength) return text;
-    return text.substring(0, maxLength) + '...';
+// Utility function to escape HTML (only for user input/comments, not post content)
+function escapeHtml(unsafe) {
+    if (!unsafe) return '';
+    return unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
-function showToast(message) {
+// Show toast notification
+function showToast(message, type = 'success') {
+    if (!toast) return;
+    
     toast.textContent = message;
+    toast.className = `toast ${type}`;
     toast.classList.add('show');
+    
     setTimeout(() => {
         toast.classList.remove('show');
     }, 3000);
 }
 
-// Close modals when clicking outside
-window.onclick = function(event) {
-    if (event.target === commentModal) {
-        closeCommentModal();
-    }
-    if (event.target === postModal) {
-        closePostModal();
-    }
-};
+// Make functions globally available
+window.toggleLike = toggleLike;
+window.toggleCommentBox = toggleCommentBox;
+window.submitComment = submitComment;
+window.editComment = editComment;
+window.deleteComment = deleteComment;
+window.openPostModal = openPostModal;
+window.closePostModal = closePostModal;
+window.openImageModal = openImageModal;
 
-// Handle keyboard events
-document.addEventListener('keydown', function(event) {
-    if (event.key === 'Escape') {
-        if (commentModal.style.display === 'block') {
-            closeCommentModal();
-        }
-        if (postModal.style.display === 'block') {
-            closePostModal();
-        }
-    }
-});
+// Poll for new posts every 30 seconds
+setInterval(loadPosts, 30000);
 
-// Update createPostContent to always support toggling between truncated and full content
-function createPostContent(post, idx, expanded = false) {
-    const maxLength = 300;
-    let isTruncated = post.content.length > maxLength;
-    if (expanded && isTruncated) {
-        return `
-            <p class="post-text" id="post-text-${idx}">
-                ${post.content}
-                <button type="button" class="show-less" data-idx="${idx}">Hide</button>
-            </p>
-        `;
-    } else {
-        let displayContent = isTruncated ? truncateText(post.content, maxLength) : post.content;
-        return `
-            <p class="post-text" id="post-text-${idx}">
-                ${displayContent}
-                ${isTruncated ? `<button type="button" class="show-more" data-idx="${idx}">Show more...</button>` : ''}
-            </p>
-        `;
-    }
-}
-
-// In displayPosts, after rendering posts, set up event delegation for both 'Show more' and 'Hide'
-function setupShowMoreLessHandlers(posts) {
-    posts.forEach((post, idx) => {
-        const postText = document.getElementById(`post-text-${idx}`);
-        if (!postText) return;
-        const showMore = postText.querySelector('.show-more');
-        const showLess = postText.querySelector('.show-less');
-        if (showMore) {
-            showMore.onclick = function(e) {
-                e.stopPropagation();
-                postText.outerHTML = createPostContent(post, idx, true);
-                setupShowMoreLessHandlers(posts); // re-attach handlers
-            };
-        }
-        if (showLess) {
-            showLess.onclick = function(e) {
-                e.stopPropagation();
-                postText.outerHTML = createPostContent(post, idx, false);
-                setupShowMoreLessHandlers(posts); // re-attach handlers
-            };
-            // Also allow clicking anywhere on the expanded post-text to collapse
-            postText.onclick = function(e) {
-                // Prevent collapse if clicking the 'Hide' link itself
-                if (e.target.classList.contains('show-less')) return;
-                postText.outerHTML = createPostContent(post, idx, false);
-                setupShowMoreLessHandlers(posts);
-            };
-        }
-    });
-}
-// Call setupShowMoreLessHandlers(posts) at the end of displayPosts
+// Initial load
+loadPosts();

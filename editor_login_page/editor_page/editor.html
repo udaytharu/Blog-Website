@@ -6,6 +6,7 @@
     <meta name="description" content="Editor dashboard for managing blog posts">
     <meta name="theme-color" content="#4CAF50">
     <title>Editor Dashboard - Blog Platform</title>
+    <link rel="icon" type="image/png" href="./favicon.svg">
     <link rel="stylesheet" href="editor.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -67,12 +68,6 @@
                     <a href="#" onclick="showSection('media')">
                         <i class="fas fa-images"></i>
                         <span>Media Library</span>
-                    </a>
-                </li>
-                <li>
-                    <a href="#" onclick="showSection('analytics')">
-                        <i class="fas fa-chart-bar"></i>
-                        <span>Analytics</span>
                     </a>
                 </li>
                 <li>
@@ -147,14 +142,15 @@
                             </div>
                         </div>
                     </div>
-                    <div class="dashboard-charts">
-                        <div class="chart-container">
-                            <h3>Post Views Over Time</h3>
-                            <canvas id="viewsChart"></canvas>
+                    <!-- Additional key metrics -->
+                    <div class="dashboard-metrics">
+                        <div class="metric-pill">
+                            <span class="metric-label">Engagement Rate</span>
+                            <span class="metric-value" id="engagementRate">0%</span>
                         </div>
-                        <div class="chart-container">
-                            <h3>Top Performing Posts</h3>
-                            <div id="topPosts" class="top-posts-list"></div>
+                        <div class="metric-pill">
+                            <span class="metric-label">Avg. Views / Post</span>
+                            <span class="metric-value" id="avgViews">0</span>
                         </div>
                     </div>
                 </div>
@@ -212,6 +208,7 @@
                             <option value="newest">Newest First</option>
                             <option value="oldest">Oldest First</option>
                             <option value="mostViewed">Most Viewed</option>
+                            <option value="trending">Trending Now</option>
                         </select>
                     </div>
                     <div class="filter-group">
@@ -270,6 +267,10 @@
                             <button type="button" class="toolbar-btn" title="Image" onclick="triggerPhotoUpload()"><i class="fas fa-image"></i></button>
                         </div>
                         <div id="postDescription" name="postDescription" class="input-field" contenteditable="true" style="min-height: 160px; background: #fafbfc; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1rem;"></div>
+                        <div class="read-time-indicator">
+                            <i class="fas fa-clock"></i>
+                            <span id="readTimeIndicator">Estimated read time: 0 min</span>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="postPhotos">Add Images</label>
@@ -342,38 +343,6 @@
                 <div class="media-grid" id="mediaGrid"></div>
             </section>
 
-            <!-- Analytics Section -->
-            <section id="analytics-section" class="editor-section" style="display: none;">
-                <div class="section-header">
-                    <h2>Analytics</h2>
-                    <div class="filter-box">
-                        <select id="analyticsRange" onchange="loadAnalytics()">
-                            <option value="7">Last 7 days</option>
-                            <option value="30" selected>Last 30 days</option>
-                            <option value="90">Last 90 days</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="analytics-grid">
-                    <div class="analytics-card">
-                        <h3>Traffic Overview</h3>
-                        <div class="chart-container">
-                            <canvas id="trafficChart"></canvas>
-                        </div>
-                    </div>
-                    <div class="analytics-card">
-                        <h3>User Engagement</h3>
-                        <div class="chart-container">
-                            <canvas id="engagementChart"></canvas>
-                        </div>
-                    </div>
-                    <div class="analytics-card">
-                        <h3>Popular Posts</h3>
-                        <div id="popularPosts"></div>
-                    </div>
-                </div>
-            </section>
-
             <!-- Settings Section -->
             <section id="settings-section" class="editor-section" style="display: none;">
                 <div class="settings-grid">
@@ -422,6 +391,17 @@
                             <button type="submit" class="btn btn-primary">Save Preferences</button>
                         </form>
                     </div>
+                    <div class="settings-card">
+                        <h3>Appearance</h3>
+                        <form id="appearanceForm" class="settings-form">
+                            <div class="form-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="darkModeToggle">
+                                    <span>Enable dark mode</span>
+                                </label>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </section>
         </main>
@@ -430,7 +410,6 @@
     <!-- Toast Notification -->
     <div id="toast" class="toast"></div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="editor.js"></script>
 </body>
 </html>
