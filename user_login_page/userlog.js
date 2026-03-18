@@ -76,7 +76,7 @@ async function login() {
         const btn = document.querySelector('#login-form button[type="submit"]');
         btn.disabled = true;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Logging in...';
-        const res = await fetch('/api/login', {
+        const res = await fetch('/api/auth/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
@@ -85,6 +85,8 @@ async function login() {
         if (!res.ok) {
             showLoginError(data.error || 'Login failed.');
         } else {
+            if (data.user?._id) localStorage.setItem('userId', data.user._id);
+            if (data.user?.username) localStorage.setItem('username', data.user.username);
             errorMsg.style.display = 'block';
             errorMsg.style.color = '#28a745';
             errorMsg.querySelector('span').textContent = 'Login successful! Redirecting...';
@@ -139,7 +141,7 @@ async function register() {
         const btn = document.querySelector('#register-form button[type="submit"]');
         btn.disabled = true;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Registering...';
-        const res = await fetch('/api/register', {
+        const res = await fetch('/api/auth/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, email, password })
@@ -150,11 +152,12 @@ async function register() {
         } else {
             errorMsg.style.display = 'block';
             errorMsg.style.color = '#28a745';
-            errorMsg.querySelector('span').textContent = 'Registration successful! You can now log in.';
+            errorMsg.querySelector('span').textContent = 'Registration successful! Redirecting...';
             setTimeout(() => {
-                showLoginForm();
-                errorMsg.style.display = 'none';
-                errorMsg.style.color = '';
+                // user is already logged in via cookie
+                if (data.user?._id) localStorage.setItem('userId', data.user._id);
+                if (data.user?.username) localStorage.setItem('username', data.user.username);
+                window.location.href = 'user_page/user.html';
             }, 1500);
         }
     } catch (err) {

@@ -4,11 +4,16 @@ class Post {
     constructor(data) {
         this._id = data._id || new ObjectId();
         this.title = data.title;
-        this.content = data.content;
+        this.slug = data.slug || null;
+        this.content = data.content; // rendered HTML for legacy UI
+        this.blocks = data.blocks || null; // Editor.js JSON
+        this.excerpt = data.excerpt || null;
         this.author = data.author;
         this.createdAt = data.createdAt || new Date();
         this.updatedAt = data.updatedAt || new Date();
         this.published = data.published || false;
+        this.publishedAt = data.publishedAt || (this.published ? (data.createdAt || new Date()) : null);
+        this.status = data.status || (this.published ? 'published' : 'draft');
         this.tags = data.tags || [];
         this.views = data.views || 0;
         this.photos = data.photos || [];

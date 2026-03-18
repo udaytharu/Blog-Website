@@ -498,10 +498,38 @@ function renderComments(comments, postId) {
         return '<div class="no-comments">No comments yet. Be the first to comment!</div>';
     }
     
-    return comments.map(comment => {
+    const renderReply = (reply, parentCommentId, depth = 1) => {
+        const isOwner = reply.userId === currentUser?.id;
+        const replyDate = reply.date ? new Date(reply.date).toLocaleString() : '';
+        const margin = Math.min(32, depth * 16);
+
+        return `
+            <div class="comment reply" data-comment-id="${reply.id}" style="margin-left: ${margin}px;">
+                <div class="comment-header">
+                    <span class="comment-author">
+                        <i class="fas fa-reply"></i> ${escapeHtml(reply.username || reply.author || 'Anonymous')}
+                    </span>
+                    <span class="comment-date">${replyDate}</span>
+                </div>
+                <div class="comment-content">
+                    <p class="comment-text" id="comment-text-${reply.id}">${escapeHtml(reply.text)}</p>
+                    ${isOwner ? `
+                        <div class="comment-actions">
+                            <button class="btn-edit" data-post-id="${postId}" data-comment-id="${parentCommentId}" data-reply-id="${reply.id}">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    };
+
+    const renderComment = (comment) => {
         const isOwner = comment.userId === currentUser?.id;
         const commentDate = comment.date ? new Date(comment.date).toLocaleString() : '';
-        
+        const replies = Array.isArray(comment.replies) ? comment.replies : [];
+
         return `
             <div class="comment" data-comment-id="${comment.id}">
                 <div class="comment-header">
@@ -512,20 +540,95 @@ function renderComments(comments, postId) {
                 </div>
                 <div class="comment-content">
                     <p class="comment-text" id="comment-text-${comment.id}">${escapeHtml(comment.text)}</p>
-                    ${isOwner ? `
-                        <div class="comment-actions">
+                    <div class="comment-actions">
+                        <button class="btn-reply" onclick="event.stopPropagation(); toggleReplyBox('${postId}', '${comment.id}')">
+                            <i class="fas fa-reply"></i> Reply
+                        </button>
+                        ${isOwner ? `
                             <button class="btn-edit" data-post-id="${postId}" data-comment-id="${comment.id}">
                                 <i class="fas fa-edit"></i> Edit
                             </button>
                             <button class="btn-delete" data-post-id="${postId}" data-comment-id="${comment.id}">
                                 <i class="fas fa-trash"></i> Delete
                             </button>
-                        </div>
-                    ` : ''}
+                        ` : ''}
+                    </div>
+
+                    <div class="comment-form reply-form" id="reply-form-${postId}-${comment.id}" style="display:none; margin-top: 10px;">
+                        <input type="text" id="reply-input-${postId}-${comment.id}" placeholder="Write a reply..." class="comment-input" required>
+                        <button class="btn btn-primary" onclick="event.stopPropagation(); submitReply('${postId}', '${comment.id}')">
+                            <i class="fas fa-paper-plane"></i> Reply
+                        </button>
+                    </div>
+                </div>
+
+                <div class="replies">
+                    ${replies.map(r => renderReply(r, comment.id, 1)).join('')}
                 </div>
             </div>
         `;
-    }).join('');
+    };
+
+    return comments.map(renderComment).join('');
+}
+
+function toggleReplyBox(postId, commentId) {
+    const form = document.getElementById(`reply-form-${postId}-${commentId}`);
+    if (!form) return;
+    form.style.display = form.style.display === 'none' || form.style.display === '' ? 'flex' : 'none';
+    const input = document.getElementById(`reply-input-${postId}-${commentId}`);
+    if (input) input.focus();
+}
+
+async function submitReply(postId, commentId) {
+    if (!currentUser) {
+        showToast('Please login to reply', 'error');
+        return;
+    }
+    const input = document.getElementById(`reply-input-${postId}-${commentId}`);
+    const text = (input?.value || '').trim();
+    if (!text) {
+        showToast('Please enter a reply', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/posts/${postId}/comment/${commentId}/reply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                text,
+                author: currentUser.username,
+                userId: currentUser.id
+            })
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Failed to reply');
+
+        const postIndex = posts.findIndex(p => p._id === postId);
+        if (postIndex === -1) return;
+        const post = posts[postIndex];
+        const comments = post.comments || [];
+        const c = comments.find(c => c.id === commentId);
+        if (c) {
+            c.replies = Array.isArray(c.replies) ? c.replies : [];
+            c.replies.push(data.reply);
+        }
+        post.comments = comments;
+        posts[postIndex] = post;
+
+        if (input) input.value = '';
+        const form = document.getElementById(`reply-form-${postId}-${commentId}`);
+        if (form) form.style.display = 'none';
+
+        const commentsList = document.getElementById(`comments-list-${postId}`);
+        if (commentsList) commentsList.innerHTML = renderComments(comments, postId);
+
+        showToast('Reply added!');
+    } catch (error) {
+        console.error('Error submitting reply:', error);
+        showToast('Failed to add reply', 'error');
+    }
 }
 
 // Toggle like
@@ -826,6 +929,11 @@ function openImageModal(src) {
 
 // Logout function
 function logout() {
+    try {
+        fetch(`${API_BASE_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' });
+    } catch {
+        // ignore
+    }
     localStorage.removeItem('userId');
     localStorage.removeItem('username');
     localStorage.removeItem('currentUser');
@@ -865,6 +973,8 @@ window.deleteComment = deleteComment;
 window.openPostModal = openPostModal;
 window.closePostModal = closePostModal;
 window.openImageModal = openImageModal;
+window.toggleReplyBox = toggleReplyBox;
+window.submitReply = submitReply;
 
 // Poll for new posts every 30 seconds
 setInterval(loadPosts, 30000);

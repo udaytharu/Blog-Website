@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Search blogs and users">
+    <meta name="theme-color" content="#4CAF50">
+    <title>Search - Blog Platform</title>
+    <link rel="stylesheet" href="user.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <nav class="user-nav">
+        <div class="nav-brand">
+            <i class="fas fa-search"></i>
+            <span>Search</span>
+        </div>
+        <div class="nav-links">
+            <a href="user.html" class="nav-link">
+                <i class="fas fa-book-reader"></i> Posts
+            </a>
+            <a href="../userlog.html" class="nav-link" id="logoutBtn">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </a>
+        </div>
+    </nav>
+
+    <div class="blog-container">
+        <div class="filters" style="align-items: center;">
+            <div class="search-box" style="flex: 1; max-width: 720px;">
+                <i class="fas fa-search"></i>
+                <input type="text" id="q" placeholder="Search blogs or users..." autocomplete="off">
+            </div>
+            <div class="filter-group">
+                <label for="type">Type:</label>
+                <select id="type">
+                    <option value="all">All</option>
+                    <option value="blogs">Blogs</option>
+                    <option value="users">Users</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="results" class="posts-grid"></div>
+        <div id="empty" class="no-posts" style="display:none;">
+            <i class="fas fa-search"></i>
+            <h2>No Results</h2>
+            <p>Try a different keyword.</p>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+    <script src="search.js"></script>
+</body>
+</html>
+

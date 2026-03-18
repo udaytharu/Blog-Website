@@ -7,7 +7,8 @@ const API_BASE_URL = window.CONFIG ? window.CONFIG.API_BASE_URL : 'http://localh
 // DOM Elements
 const form = document.getElementById('postForm');
 const titleInput = document.getElementById('postTitle');
-const descriptionInput = document.getElementById('postDescription');
+const descriptionInput = document.getElementById('postDescription'); // hidden legacy HTML field
+const editorHolder = document.getElementById('editorjs');
 const photoInput = document.getElementById('postPhotos');
 const editIndexInput = document.getElementById('editIndex');
 const formTitle = document.getElementById('formTitle');
@@ -36,6 +37,7 @@ let sortBy = 'newest';
 let filterBy = 'all';
 let refreshInterval = null;
 let activeCharts = {};
+let editor = null;
 
 // Chart instances
 let viewsChart = null;
@@ -153,6 +155,9 @@ function showSection(section) {
             break;
         case 'new-post':
             formTitle.textContent = editIndexInput.value === '-1' ? 'Create New Post' : 'Edit Post';
+            if (editIndexInput.value === '-1') {
+                clearForm();
+            }
             break;
         case 'drafts':
             displayDrafts();
@@ -237,11 +242,6 @@ async function fetchAllPosts() {
         if (!response.ok) throw new Error('Failed to fetch posts');
         const data = await response.json();
         const posts = Array.isArray(data) ? data : [];
-        if (posts.length === 0) {
-            const demoPosts = generateDemoPosts();
-            localStorage.setItem('posts', JSON.stringify(demoPosts));
-            return demoPosts;
-        }
         return posts;
     } catch (error) {
         console.error('Error fetching posts, falling back to local/demo data:', error);
@@ -251,14 +251,11 @@ async function fetchAllPosts() {
             const stored = localStorage.getItem('posts');
             localPosts = stored ? JSON.parse(stored) : [];
         } catch (e) {
-            console.warn('Invalid posts data in localStorage, resetting demo data.', e);
+            console.warn('Invalid posts data in localStorage, clearing.', e);
             localPosts = [];
+            localStorage.removeItem('posts');
         }
-        if (!Array.isArray(localPosts) || localPosts.length === 0) {
-            localPosts = generateDemoPosts();
-            localStorage.setItem('posts', JSON.stringify(localPosts));
-        }
-        return localPosts;
+        return Array.isArray(localPosts) ? localPosts : [];
     }
 }
 
@@ -1353,7 +1350,12 @@ async function editPost(id, isDraft) {
         }
         
         titleInput.value = item.title || '';
-        descriptionInput.innerHTML = item.content || '';
+        if (editor && item.blocks) {
+            await editor.render(item.blocks);
+            descriptionInput.innerHTML = renderEditorBlocksToHtml(item.blocks);
+        } else {
+            descriptionInput.innerHTML = item.content || '';
+        }
         editIndexInput.value = id;
         postStatusSelect.value = item.status || (isDraft ? 'draft' : 'published');
         formTitle.textContent = isDraft ? 'Edit Draft' : 'Edit Post';
@@ -1481,7 +1483,18 @@ async function savePost(e) {
     e.preventDefault();
     
     const title = titleInput.value.trim();
-    const content = descriptionInput.innerHTML.trim();
+    let blocks = null;
+    if (editor) {
+        try {
+            blocks = await editor.save();
+        } catch (err) {
+            console.error('Editor save failed:', err);
+        }
+    }
+    if (blocks) {
+        descriptionInput.innerHTML = renderEditorBlocksToHtml(blocks);
+    }
+    const content = (descriptionInput.innerHTML || '').trim();
     
     if (!title || !content || content === '<br>') {
         showToast('Please fill in all required fields', 'error');
@@ -1498,6 +1511,8 @@ async function savePost(e) {
     const post = {
         title: title,
         content: content,
+        blocks: blocks,
+        excerpt: stripHtmlForExcerpt(content, 180),
         author: editorName,
         updatedAt: now,
         published: !isDraft,
@@ -1556,6 +1571,9 @@ function clearForm() {
     formTitle.textContent = 'Create New Post';
     cancelBtn.style.display = 'none';
     descriptionInput.innerHTML = '';
+    if (editor) {
+        editor.render({ blocks: [] }).catch(() => {});
+    }
     updateActionButtons();
     updateReadTime();
 }
@@ -2094,6 +2112,49 @@ function updateReadTime() {
     }
 }
 
+function renderEditorBlocksToHtml(data) {
+    const blocks = data?.blocks || [];
+    const escape = (s) => String(s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    return blocks.map((block) => {
+        switch (block.type) {
+            case 'header': {
+                const level = Math.min(6, Math.max(1, Number(block.data?.level || 2)));
+                return `<h${level}>${escape(block.data?.text || '')}</h${level}>`;
+            }
+            case 'paragraph':
+                return `<p>${block.data?.text || ''}</p>`;
+            case 'list': {
+                const style = block.data?.style === 'ordered' ? 'ol' : 'ul';
+                const items = (block.data?.items || []).map(i => `<li>${i}</li>`).join('');
+                return `<${style}>${items}</${style}>`;
+            }
+            case 'quote': {
+                const text = block.data?.text || '';
+                const caption = block.data?.caption ? `<cite>${escape(block.data.caption)}</cite>` : '';
+                return `<blockquote>${text}${caption}</blockquote>`;
+            }
+            case 'code':
+                return `<pre><code>${escape(block.data?.code || '')}</code></pre>`;
+            default:
+                return '';
+        }
+    }).join('\n');
+}
+
+function stripHtmlForExcerpt(html, maxLen) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html || '';
+    const text = (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+    if (text.length <= maxLen) return text;
+    return text.slice(0, maxLen).trimEnd() + '...';
+}
+
 function updateActionButtons() {
     const publishNowBtn = document.getElementById('publishNowBtn');
     const moveToDraftBtn = document.getElementById('moveToDraftBtn');
@@ -2159,10 +2220,16 @@ document.addEventListener('DOMContentLoaded', function() {
         form.addEventListener('submit', savePost);
     }
     
-    // Live read-time updates
+    // Editor.js init (primary editor) - using fallback for now
+    // Fallback: enable legacy contenteditable
     if (descriptionInput) {
+        descriptionInput.style.display = '';
+        descriptionInput.setAttribute('contenteditable', 'true');
         descriptionInput.addEventListener('input', updateReadTime);
         updateReadTime();
+    }
+    if (editorHolder) {
+        editorHolder.style.display = 'none';
     }
     
     // Photo input change

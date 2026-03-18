@@ -4,8 +4,14 @@ class User {
     constructor(data) {
         this._id = data._id || new ObjectId();
         this.username = data.username;
+        this.slug = data.slug || data.username;
+        this.displayName = data.displayName || data.username;
         this.email = data.email;
-        this.password = data.password; // Save password (hashed)
+        this.password = data.password; // hashed (optional for Google users)
+        this.googleId = data.googleId || null;
+        this.avatarUrl = data.avatarUrl || null;
+        this.bio = data.bio || '';
+        this.socialLinks = data.socialLinks || {};
         this.joinDate = data.joinDate || new Date();
         this.lastLogin = data.lastLogin || new Date();
         this.role = data.role || 'user'; // 'user' or 'editor'
@@ -28,6 +34,14 @@ class User {
 
     static async findByEmail(db, email) {
         return await db.collection('users').findOne({ email });
+    }
+
+    static async findByGoogleId(db, googleId) {
+        return await db.collection('users').findOne({ googleId });
+    }
+
+    static async findBySlug(db, slug) {
+        return await db.collection('users').findOne({ slug });
     }
 
     static async findAll(db, filter = {}) {

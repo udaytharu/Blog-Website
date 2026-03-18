@@ -1,14 +1,19 @@
 const { MongoClient } = require('mongodb');
 require('dotenv').config();
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://udaytharu813:GtGDshYkHsCGaA4p@clusterblog.wkt8a4g.mongodb.net/';
+const MONGODB_URI = process.env.MONGODB_URI;
 const DB_NAME = process.env.DB_NAME || 'blog_website';
 
 let db = null;
+let client = null;
 
 async function connectToDatabase() {
     try {
-        const client = new MongoClient(MONGODB_URI);
+        if (!MONGODB_URI) {
+            throw new Error('Missing MONGODB_URI in environment');
+        }
+
+        client = new MongoClient(MONGODB_URI);
         await client.connect();
         console.log('Connected to MongoDB successfully');
         
@@ -27,7 +32,16 @@ function getDatabase() {
     return db;
 }
 
+async function closeDatabase() {
+    if (client) {
+        await client.close();
+        client = null;
+        db = null;
+    }
+}
+
 module.exports = {
     connectToDatabase,
-    getDatabase
+    getDatabase,
+    closeDatabase
 }; 

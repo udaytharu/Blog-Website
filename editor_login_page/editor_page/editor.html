@@ -9,6 +9,11 @@
     <link rel="icon" type="image/png" href="./favicon.svg">
     <link rel="stylesheet" href="editor.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/editorjs@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/header@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/list@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/quote@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@editorjs/code@latest"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="icon" type="image/png" href="https://www.udayrajchaudhary.com.np/favicon.ico">
 </head>
@@ -266,7 +271,8 @@
                             <button type="button" class="toolbar-btn" title="Link" onclick="insertLink()"><i class="fas fa-link"></i></button>
                             <button type="button" class="toolbar-btn" title="Image" onclick="triggerPhotoUpload()"><i class="fas fa-image"></i></button>
                         </div>
-                        <div id="postDescription" name="postDescription" class="input-field" contenteditable="true" style="min-height: 160px; background: #fafbfc; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1rem;"></div>
+                        <div id="editorjs" class="input-field" style="min-height: 220px; background: #fafbfc; border: 1px solid #e0e0e0; border-radius: 8px; padding: 1rem;"></div>
+                        <div id="postDescription" name="postDescription" class="input-field" contenteditable="true" style="display:none;"></div>
                         <div class="read-time-indicator">
                             <i class="fas fa-clock"></i>
                             <span id="readTimeIndicator">Estimated read time: 0 min</span>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Blog post">
+    <title>Blog Post</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .post-page { max-width: 920px; margin: 0 auto; padding: 24px 16px; }
+        .post-hero { display:flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+        .post-hero h1 { margin: 0; font-size: 2rem; }
+        .post-meta { display:flex; gap: 16px; flex-wrap: wrap; color: rgba(0,0,0,0.65); }
+        .post-body { background: rgba(255,255,255,0.9); border: 1px solid rgba(0,0,0,0.06); border-radius: 14px; padding: 18px; }
+        .post-actions { display:flex; gap: 10px; margin: 14px 0; }
+        .btn { border: 0; border-radius: 12px; padding: 10px 12px; cursor: pointer; }
+        .btn-primary { background: #4CAF50; color: #fff; }
+        .btn-secondary { background: rgba(0,0,0,0.06); }
+        .comment-box { margin-top: 20px; display:flex; flex-direction: column; gap: 10px; }
+        .comment { border-top: 1px solid rgba(0,0,0,0.06); padding-top: 12px; margin-top: 12px; }
+        .comment small { color: rgba(0,0,0,0.6); }
+        @media (max-width: 600px) {
+            .post-hero h1 { font-size: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="post-page fade-in">
+        <a href="/" style="text-decoration:none; display:inline-flex; gap:8px; align-items:center; margin-bottom: 12px;">
+            <i class="fas fa-arrow-left"></i> Home
+        </a>
+
+        <div class="post-hero">
+            <h1 id="title">Loading...</h1>
+            <div class="post-meta" id="meta"></div>
+        </div>
+
+        <div class="post-actions">
+            <button class="btn btn-secondary" id="likeBtn"><i class="fas fa-heart"></i> <span id="likeCount">0</span></button>
+            <button class="btn btn-secondary" id="commentToggleBtn"><i class="fas fa-comment"></i> <span id="commentCount">0</span></button>
+        </div>
+
+        <div class="post-body" id="content"></div>
+
+        <div class="comment-box" id="commentsSection" style="display:none;">
+            <div id="commentsList"></div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <input id="commentText" placeholder="Write a comment..." style="flex:1; min-width:220px; padding:10px 12px; border-radius:12px; border:1px solid rgba(0,0,0,0.08);">
+                <button class="btn btn-primary" id="commentBtn"><i class="fas fa-paper-plane"></i> Post</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/blog.js"></script>
+</body>
+</html>
+

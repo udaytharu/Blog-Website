@@ -4,11 +4,15 @@ class Draft {
     constructor(data) {
         this._id = data._id || new ObjectId();
         this.title = data.title;
-        this.content = data.content;
+        this.slug = data.slug || null;
+        this.content = data.content; // rendered HTML for legacy UI
+        this.blocks = data.blocks || null; // Editor.js JSON
+        this.excerpt = data.excerpt || null;
         this.author = data.author;
         this.createdAt = data.createdAt || new Date();
         this.updatedAt = data.updatedAt || new Date();
         this.isDraft = true;
+        this.status = 'draft';
         this.tags = data.tags || [];
     }
 

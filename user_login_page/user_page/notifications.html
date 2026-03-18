@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Your notifications">
+    <meta name="theme-color" content="#4CAF50">
+    <title>Notifications - Blog Platform</title>
+    <link rel="stylesheet" href="user.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <nav class="user-nav">
+        <div class="nav-brand">
+            <i class="fas fa-bell"></i>
+            <span>Notifications</span>
+        </div>
+        <div class="nav-links">
+            <a href="user.html" class="nav-link">
+                <i class="fas fa-book-reader"></i> Posts
+            </a>
+            <a href="search.html" class="nav-link">
+                <i class="fas fa-search"></i> Search
+            </a>
+            <a href="../userlog.html" class="nav-link" id="logoutBtn">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </a>
+        </div>
+    </nav>
+
+    <div class="blog-container">
+        <div class="filters" style="justify-content: space-between; align-items: center;">
+            <div style="display:flex; gap: 10px; align-items: center;">
+                <span style="font-weight: 600;">Recent</span>
+                <span id="unreadBadge" style="display:none; background:#4CAF50; color:#fff; padding:2px 10px; border-radius:999px; font-size:0.8rem;">0 unread</span>
+            </div>
+            <button class="btn btn-primary" id="markAllReadBtn" type="button">
+                <i class="fas fa-check"></i> Mark all read
+            </button>
+        </div>
+
+        <div id="list" class="posts-grid"></div>
+        <div id="empty" class="no-posts" style="display:none;">
+            <i class="fas fa-bell"></i>
+            <h2>No Notifications</h2>
+            <p>You’re all caught up.</p>
+        </div>
+        <div id="loginRequired" class="no-posts" style="display:none;">
+            <i class="fas fa-lock"></i>
+            <h2>Login required</h2>
+            <p>Sign in to view your notifications.</p>
+        </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+    <script src="notifications.js"></script>
+</body>
+</html>
+
